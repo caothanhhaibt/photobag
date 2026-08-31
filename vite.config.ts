@@ -1,11 +1,15 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    // basicSsl: bật HTTPS cho server dev bằng chứng chỉ tự tạo — bắt buộc phải có để điện thoại
+    // (đặc biệt Safari trên iPhone) cho phép trang web dùng camera khi truy cập qua địa chỉ IP
+    // trong mạng Wifi nội bộ (http:// thường sẽ bị trình duyệt điện thoại chặn quyền camera).
+    plugins: [react(), tailwindcss(), basicSsl()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

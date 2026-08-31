@@ -31,6 +31,8 @@ interface CameraScreenProps {
   onSetTimerSeconds?: (seconds: 0 | 3 | 5 | 10) => void;
   cameraFacing?: 'user' | 'environment';
   onFlipCamera?: () => void;
+  selectedCameraId?: string | null;
+  externalStream?: MediaStream | null;
   previewMode?: SlotPreviewMode;
   onSetPreviewMode?: (mode: SlotPreviewMode) => void;
   captureTriggerMode?: CaptureTriggerMode;
@@ -75,6 +77,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   onSetTimerSeconds,
   cameraFacing: propCameraFacing,
   onFlipCamera: propOnFlipCamera,
+  selectedCameraId,
+  externalStream,
   previewMode: propPreviewMode,
   onSetPreviewMode,
   captureTriggerMode: propCaptureTriggerMode,
@@ -148,27 +152,54 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   // Thông tin bộ lọc phim đang áp dụng cho ống kính
   const activePreset = FILTER_PRESETS.find((p) => p.id === currentFilterId) || FILTER_PRESETS[0];
 
+  // Chỉ dừng (stop) stream nếu nó do CHÍNH màn hình này mở — không đụng vào stream camera điện
+  // thoại đã ghép nối qua Wifi, vì stream đó do usePhoneCameraPairing ở App.tsx quản lý riêng.
+  const stopOwnedStream = useCallback(() => {
+    if (streamRef.current && streamRef.current !== externalStream) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    streamRef.current = null;
+  }, [externalStream]);
+
   // Khởi động webcam
   const startCamera = useCallback(async () => {
-    if (!isLiveStream) {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
+    // Ưu tiên tuyệt đối: nếu đã ghép nối camera điện thoại qua Wifi thì dùng luôn nguồn đó,
+    // không mở camera của chính máy này nữa.
+    if (externalStream) {
+      stopOwnedStream();
+      streamRef.current = externalStream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = externalStream;
+        videoRef.current.play().catch(() => {});
       }
+      setCameraError(null);
+      return;
+    }
+
+    if (!isLiveStream) {
+      stopOwnedStream();
       return;
     }
 
     try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      stopOwnedStream();
+
+      // Nếu Admin đã chọn một camera cụ thể (qua Cài Đặt > Camera & Thiết Bị) thì ưu tiên
+      // dùng đúng thiết bị đó (deviceId); nếu không, dùng facingMode như mặc định cũ.
+      const videoConstraints: MediaTrackConstraints = selectedCameraId
+        ? {
+            deviceId: { exact: selectedCameraId },
+            width: { ideal: 1920 },
+            height: { ideal: 1440 },
+          }
+        : {
+            facingMode: cameraFacing,
+            width: { ideal: 1920 },
+            height: { ideal: 1440 },
+          };
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: cameraFacing,
-          width: { ideal: 1920 },
-          height: { ideal: 1440 },
-        },
+        video: videoConstraints,
         audio: false,
       });
 
@@ -182,15 +213,12 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       console.warn('Không thể truy cập camera, chuyển sang chế độ ống kính mẫu Studio', err);
       setCameraError('Chưa cấp quyền camera. Đang dùng ảnh mẫu.');
     }
-  }, [isLiveStream, cameraFacing]);
+  }, [isLiveStream, cameraFacing, selectedCameraId, externalStream, stopOwnedStream]);
 
   useEffect(() => {
     startCamera();
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
+      stopOwnedStream();
       if (countdownTimerRef.current) {
         clearInterval(countdownTimerRef.current);
       }

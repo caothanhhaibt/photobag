@@ -1,0 +1,16 @@
+name = "photobag-upload-worker"
+main = "worker.js"
+compatibility_date = "2026-08-31"
+
+# Gắn Worker này với đúng bucket R2 bạn đã tạo — đổi "bucket_name" thành tên bucket thật của bạn.
+[[r2_buckets]]
+binding = "PHOTO_BUCKET"
+bucket_name = "photobag"
+
+# Đổi thành địa chỉ công khai (public) của chính bucket đó — lấy trong Cloudflare Dashboard,
+# mục R2 > (chọn bucket) > Settings > Public Access > địa chỉ dạng https://pub-xxxxxxxx.r2.dev
+[vars]
+PUBLIC_BASE_URL = "https://pub-405efea8b0f94579bcd23a69abe7713c.r2.dev"
+
+# LƯU Ý: mã bí mật UPLOAD_TOKEN KHÔNG khai báo ở file này (file này thường được lưu trong Git,
+# không nên chứa bí mật). Đặt nó bằng lệnh: wrangler secret put UPLOAD_TOKEN — xem README.md.

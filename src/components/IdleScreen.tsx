@@ -59,7 +59,7 @@ export const DEFAULT_EVENT_CONFIG: EventConfig = {
   enableFreeCaptureMode: false, // Mặc định tắt (chụp theo bố cục), khi bật thì chụp tự do
   security: {
     adminPin: '1234',
-    enableKioskLock: false,
+    enableKioskLock: true,
     enableFullScreenKiosk: false,
     hideAdminGearButton: false,
     autoResetAfterShareSeconds: 45,

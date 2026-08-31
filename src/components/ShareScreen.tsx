@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { AppScreen, CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization } from '../types';
 import { FRAME_COLORS, LAYOUT_OPTIONS, FRAME_STYLE_OPTIONS, FILTER_PRESETS } from '../constants/filters';
 import { generatePhotostripCanvas, downloadCanvas } from '../utils/canvas';
-import { generateQrCodeSvg } from '../utils/share';
+import QRCode from 'qrcode';
+import { uploadPhotoToCloud, isCloudStorageConfigured } from '../utils/cloudStorage';
 import { LayoutIllustration, FrameStyleIllustration } from './VisualPreviews';
 import {
   Download,
@@ -76,6 +77,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   const [noteText, setNoteText] = useState<string>('Forever & Always ♡\nLưu giữ từng khoảnh khắc ngọt ngào!');
   const [copied, setCopied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Tải ảnh lên đám mây (Cloudflare R2 qua Worker) để có link tải thật cho mã QR — thay cho mã QR
+  // giả trước đây chỉ trỏ về link trang camera, không tải được ảnh nào.
+  const [cloudUploadStatus, setCloudUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'error' | 'not_configured'>('idle');
+  const [cloudUploadError, setCloudUploadError] = useState<string | null>(null);
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
+  const [uploadedPhotoQrSvg, setUploadedPhotoQrSvg] = useState<string | null>(null);
+  const [cloudUploadAttempt, setCloudUploadAttempt] = useState(0);
 
   // Pool of available photos (from current session or library)
   const availablePool = capturedPhotos.length > 0 ? capturedPhotos : allLibraryPhotos;
@@ -212,28 +221,36 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   };
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : 'https://photobooth.app';
-  const qrSvg = generateQrCodeSvg(currentUrl, 140);
+  // Link để chia sẻ/mã QR: ưu tiên link ảnh thật vừa tải lên đám mây, nếu chưa có (đang tải, lỗi,
+  // hoặc chưa cấu hình nơi lưu) thì tạm dùng link trang hiện tại.
+  const shareUrl = uploadedPhotoUrl || currentUrl;
+
+  // Dựng lại đúng canvas dải ảnh theo layout/khung/tuỳ chỉnh hiện tại — dùng chung cho cả nút tải
+  // về máy VÀ bước tải lên đám mây để tạo mã QR (đảm bảo 2 nơi luôn ra đúng 1 ảnh giống nhau).
+  const buildStripCanvas = async () => {
+    const customList: SlotCustomization[] = [];
+    for (let i = 0; i < requiredCount; i++) {
+      customList.push(slotCustomizations[i] || { slotIndex: i, rotation: 0, flipH: false });
+    }
+
+    return generatePhotostripCanvas({
+      photos: stripPhotos,
+      layout,
+      frameColor,
+      frameStyle,
+      customTitle: customTitle || 'PHOTOBOOTH',
+      dateStr: dateStr || new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      noteText,
+      columnAlign,
+      slotCustomizations: customList,
+    });
+  };
 
   const handleDownload = async () => {
     try {
       setIsExporting(true);
 
-      const customList: SlotCustomization[] = [];
-      for (let i = 0; i < requiredCount; i++) {
-        customList.push(slotCustomizations[i] || { slotIndex: i, rotation: 0, flipH: false });
-      }
-
-      const canvas = await generatePhotostripCanvas({
-        photos: stripPhotos,
-        layout,
-        frameColor,
-        frameStyle,
-        customTitle: customTitle || 'PHOTOBOOTH',
-        dateStr: dateStr || new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-        noteText,
-        columnAlign,
-        slotCustomizations: customList,
-      });
+      const canvas = await buildStripCanvas();
 
       const filename = `photobooth_${layout}_${frameStyle}_${Date.now()}.png`;
       downloadCanvas(canvas, filename);
@@ -257,10 +274,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         await navigator.share({
           title: 'Dải Ảnh Kỷ Niệm Photobooth Của Tôi',
           text: 'Xem dải ảnh photobooth phong cách nghệ thuật từ Studio!',
-          url: currentUrl,
+          url: shareUrl,
         });
       } else {
-        await navigator.clipboard.writeText(currentUrl);
+        await navigator.clipboard.writeText(shareUrl);
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
       }
@@ -268,6 +285,51 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
       // User cancelled share
     }
   };
+
+  // Tự động tải ảnh lên đám mây ngay khi khách chuyển sang màn "Xuất Bản" — để có link thật cho
+  // mã QR kịp sẵn sàng trước khi khách kịp lấy điện thoại ra quét.
+  useEffect(() => {
+    if (activeMode !== 'export') return;
+    if (!isCloudStorageConfigured(eventConfig?.cloudStorage)) {
+      setCloudUploadStatus('not_configured');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setCloudUploadStatus('uploading');
+        setCloudUploadError(null);
+        const canvas = await buildStripCanvas();
+        const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
+        if (!blob) throw new Error('Không tạo được ảnh để tải lên.');
+        if (cancelled) return;
+
+        const { url } = await uploadPhotoToCloud(blob, eventConfig!.cloudStorage!);
+        if (cancelled) return;
+
+        const svg = await QRCode.toString(url, {
+          type: 'svg',
+          margin: 1,
+          color: { dark: '#1A1A1A', light: '#00000000' },
+        });
+        if (cancelled) return;
+
+        setUploadedPhotoUrl(url);
+        setUploadedPhotoQrSvg(svg);
+        setCloudUploadStatus('done');
+      } catch (err) {
+        if (cancelled) return;
+        setCloudUploadStatus('error');
+        setCloudUploadError(err instanceof Error ? err.message : 'Tải ảnh lên đám mây thất bại.');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMode, cloudUploadAttempt]);
 
   const handleDownloadBtsVideo = () => {
     if (!sessionVideoUrl) return;
@@ -1611,10 +1673,15 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
 
             {/* Mã QR Quét Tải Về Điện Thoại */}
             <div className="bg-[#F9F7F2] p-3.5 rounded-xl border border-[#1A1A1A]/15 flex items-center gap-3.5">
-              <div
-                className="w-18 h-18 bg-white p-1 rounded-lg border border-[#1A1A1A]/10 flex items-center justify-center shrink-0"
-                dangerouslySetInnerHTML={{ __html: qrSvg }}
-              />
+              <div className="w-18 h-18 bg-white p-1 rounded-lg border border-[#1A1A1A]/10 flex items-center justify-center shrink-0">
+                {cloudUploadStatus === 'done' && uploadedPhotoQrSvg ? (
+                  <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: uploadedPhotoQrSvg }} />
+                ) : cloudUploadStatus === 'uploading' ? (
+                  <RefreshCw className="w-5 h-5 text-[#8C7A5B] animate-spin" />
+                ) : (
+                  <QrCode className="w-6 h-6 text-[#1A1A1A]/25" />
+                )}
+              </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-1">
                   <QrCode className="w-3.5 h-3.5 text-[#8C7A5B]" />
@@ -1623,11 +1690,37 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   </span>
                 </div>
                 <p className="font-sans text-xs font-bold text-[#1A1A1A] mt-0.5">
-                  Tải Dải Ảnh & Video Về Thư Viện
+                  Tải Dải Ảnh Về Thư Viện
                 </p>
-                <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                  Mở camera quét mã để xem và lưu dải ảnh sắc nét về máy.
-                </span>
+                {cloudUploadStatus === 'done' && (
+                  <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
+                    Mở camera quét mã để xem và lưu dải ảnh sắc nét về máy.
+                  </span>
+                )}
+                {cloudUploadStatus === 'uploading' && (
+                  <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
+                    Đang tải ảnh lên để tạo mã QR, chờ vài giây...
+                  </span>
+                )}
+                {cloudUploadStatus === 'not_configured' && (
+                  <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
+                    Chưa cấu hình nơi lưu ảnh trên đám mây (Admin → Quản Lý Ảnh & Bộ Nhớ).
+                  </span>
+                )}
+                {cloudUploadStatus === 'error' && (
+                  <div className="flex flex-col gap-1 mt-0.5">
+                    <span className="font-sans text-[10px] text-rose-600">
+                      {cloudUploadError || 'Tải ảnh lên thất bại.'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCloudUploadAttempt((n) => n + 1)}
+                      className="self-start text-[10px] font-bold text-[#8C7A5B] underline cursor-pointer"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

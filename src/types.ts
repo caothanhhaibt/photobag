@@ -28,6 +28,15 @@ export interface KioskSecurityConfig {
   autoResetAfterShareSeconds: number; // Tự động về màn hình chờ sau khi in/chia sẻ (VD: 30s)
 }
 
+// Nơi lưu ảnh/video trên đám mây (Cloudflare R2, qua 1 Worker trung gian) để mã QR ở màn Chia Sẻ
+// trỏ tới đúng link tải ảnh thật của khách — mỗi máy/mỗi chủ cửa hàng có thể tự nhập tài khoản
+// lưu trữ riêng của mình (đổi được bất cứ lúc nào, ví dụ khi tài khoản cũ đầy dung lượng, hoặc khi
+// bán đứt app cho chủ cửa hàng khác tự vận hành độc lập).
+export interface CloudStorageConfig {
+  workerUrl?: string; // Địa chỉ Cloudflare Worker nhận & lưu ảnh, vd: https://ten-worker.ten-tai-khoan.workers.dev
+  uploadToken?: string; // Mã bí mật xác thực với Worker (phải khớp với UPLOAD_TOKEN đã đặt trên Worker)
+}
+
 export interface EventConfig {
   eventName: string;
   eventCategory?: string; // Loại sự kiện (VD: HAPPY WEDDING, HAPPY BIRTHDAY)
@@ -47,6 +56,7 @@ export interface EventConfig {
   showLogoBorder?: boolean; // Bật / Tắt khung viền bao quanh ảnh (mặc định bật)
   enableFreeCaptureMode?: boolean; // Bật chế độ chụp tự do (chụp thoải mái, sau đó mới chọn bố cục & chọn ảnh trong tab chia sẻ)
   security?: KioskSecurityConfig;
+  cloudStorage?: CloudStorageConfig;
 }
 
 export interface FilterPreset {

@@ -6,7 +6,6 @@ import {
   HardDrive,
   Shield,
   Sliders,
-  X,
   Check,
   Download,
   Trash2,
@@ -18,7 +17,6 @@ import {
   EyeOff,
   AlertTriangle,
   Calendar,
-  Sparkles,
   Camera,
   Image as ImageIcon,
   QrCode,
@@ -39,17 +37,16 @@ import {
   Zap,
   Film,
   Upload,
-  Timer,
-  Volume2,
-  Grid,
-  Video,
   Home,
   LayoutGrid,
   ArrowLeft,
   ChevronRight,
+  Wifi,
+  Loader2,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import QRCode from 'qrcode';
 import {
   EventConfig,
   CapturedPhoto,
@@ -59,6 +56,8 @@ import {
   SlotPreviewMode,
 } from '../types';
 import { FILTER_PRESETS } from '../constants/filters';
+import type { PairingStatus } from '../hooks/usePhoneCameraPairing';
+import { isCloudStorageConfigured, listCloudObjects, deleteCloudObject, type CloudObjectInfo } from '../utils/cloudStorage';
 
 const PRESET_EVENT_IMAGES = [
   {
@@ -138,6 +137,15 @@ interface AdminDashboardModalProps {
   onToggleRecordVideo: () => void;
   previewMode: SlotPreviewMode;
   onSetPreviewMode: (mode: SlotPreviewMode) => void;
+  selectedCameraId?: string | null;
+  onSelectCameraId?: (deviceId: string | null) => void;
+  // Ghép nối camera điện thoại qua Wifi (PeerJS)
+  phonePairingStatus?: PairingStatus;
+  phonePairingCode?: string | null;
+  phonePairingError?: string | null;
+  phonePairingDeviceLabel?: string | null;
+  onStartPhonePairing?: () => void;
+  onStopPhonePairing?: () => void;
   initialTab?: AdminTab | null;
 }
 
@@ -160,6 +168,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onToggleRecordVideo,
   previewMode,
   onSetPreviewMode,
+  selectedCameraId = null,
+  onSelectCameraId,
+  phonePairingStatus = 'idle',
+  phonePairingCode = null,
+  phonePairingError = null,
+  phonePairingDeviceLabel = null,
+  onStartPhonePairing,
+  onStopPhonePairing,
   initialTab = null,
 }) => {
   // Trạng thái Xác thực PIN
@@ -171,8 +187,110 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   // File input ref for custom event emblem / logo upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Danh sách camera thật đọc từ trình duyệt (tab Camera & Thiết Bị)
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [cameraDevicesError, setCameraDevicesError] = useState<string | null>(null);
+
+  // Mã QR thật (có thể quét được) cho link ghép camera điện thoại — tạo lại mỗi khi có mã mới
+  const [pairingQrSvg, setPairingQrSvg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!phonePairingCode) {
+      setPairingQrSvg(null);
+      return;
+    }
+    const pairingUrl = `${window.location.origin}${window.location.pathname}?camera=${phonePairingCode}`;
+    let cancelled = false;
+    QRCode.toString(pairingUrl, { type: 'svg', margin: 1, color: { dark: '#1A1A1A', light: '#00000000' } })
+      .then((svg) => {
+        if (!cancelled) setPairingQrSvg(svg);
+      })
+      .catch(() => {
+        if (!cancelled) setPairingQrSvg(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phonePairingCode]);
+
   // Tab đang chọn trong Dashboard: null (màn hình 6 Widgets) hoặc 'idle_screen' | 'capture_settings' | 'analytics' | 'storage' | 'security' | 'booth_config'
   const [activeTab, setActiveTab] = useState<AdminTab | null>(initialTab ?? null);
+
+  // Danh sách ảnh/video đã lưu trên đám mây (Cloudflare R2, qua Worker) — dùng để xem & dọn dẹp
+  // thủ công trong tab Quản Lý Ảnh & Bộ Nhớ. Chỉ tải khi mở đúng tab này, tránh gọi mạng thừa.
+  const [cloudObjects, setCloudObjects] = useState<CloudObjectInfo[]>([]);
+  const [cloudObjectsStatus, setCloudObjectsStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [cloudObjectsError, setCloudObjectsError] = useState<string | null>(null);
+  const [deletingCloudKey, setDeletingCloudKey] = useState<string | null>(null);
+
+  const refreshCloudObjects = async () => {
+    if (!isCloudStorageConfigured(eventConfig.cloudStorage)) return;
+    setCloudObjectsStatus('loading');
+    setCloudObjectsError(null);
+    try {
+      const objects = await listCloudObjects(eventConfig.cloudStorage!);
+      objects.sort((a, b) => (a.uploaded < b.uploaded ? 1 : -1));
+      setCloudObjects(objects);
+      setCloudObjectsStatus('done');
+    } catch (err) {
+      setCloudObjectsStatus('error');
+      setCloudObjectsError(err instanceof Error ? err.message : 'Không tải được danh sách ảnh trên đám mây.');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'storage' && isCloudStorageConfigured(eventConfig.cloudStorage)) {
+      refreshCloudObjects();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, eventConfig.cloudStorage?.workerUrl, eventConfig.cloudStorage?.uploadToken]);
+
+  const handleDeleteCloudObject = async (key: string) => {
+    if (!isCloudStorageConfigured(eventConfig.cloudStorage)) return;
+    setDeletingCloudKey(key);
+    try {
+      await deleteCloudObject(eventConfig.cloudStorage!, key);
+      setCloudObjects((prev) => prev.filter((o) => o.key !== key));
+    } catch (err) {
+      setCloudObjectsError(err instanceof Error ? err.message : 'Xóa ảnh thất bại.');
+    } finally {
+      setDeletingCloudKey(null);
+    }
+  };
+
+  const formatCloudSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Khi vào tab Camera & Thiết Bị, hỏi trình duyệt danh sách camera thật đang có trên máy
+  useEffect(() => {
+    if (activeTab !== 'booth_config') return;
+    let cancelled = false;
+
+    const loadDevices = async () => {
+      try {
+        // Cần xin quyền camera trước thì trình duyệt mới trả về đầy đủ tên thiết bị (label)
+        try {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          tempStream.getTracks().forEach((track) => track.stop());
+        } catch {
+          // Nếu người dùng chưa cấp quyền, vẫn thử liệt kê (có thể thiếu tên thiết bị)
+        }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) return;
+        setCameraDevices(devices.filter((d) => d.kind === 'videoinput'));
+        setCameraDevicesError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setCameraDevicesError('Không thể đọc danh sách camera từ trình duyệt.');
+      }
+    };
+
+    loadDevices();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
 
   // Mỗi khi mở modal, nếu không chỉ định initialTab thì mở ngay màn hình 6 Widgets
   useEffect(() => {
@@ -286,12 +404,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     setPinError(null);
   };
 
-  // Đăng xuất Admin
-  const handleAdminLogout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('photobooth_admin_auth_time');
-    setPinInput('');
-  };
 
   // Xử lý đổi mã PIN
   const handleChangePin = (e: React.FormEvent) => {
@@ -447,7 +559,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             <Lock className="w-7 h-7" />
           </div>
 
-          <h2 className="text-base sm:text-lg font-black text-[#1A1A1A] tracking-tight uppercase">
+          <h2 className="font-artistic-serif text-base sm:text-lg font-black text-[#1A1A1A] tracking-tight uppercase">
             Quản Trị Viên Photobag
           </h2>
           <p className="text-xs text-[#1A1A1A]/70 text-center mt-1 mb-4">
@@ -544,21 +656,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   <div className="w-8 h-8 rounded-xl bg-neutral-900 text-white flex items-center justify-center shadow-xs">
                     <LayoutGrid className="w-4 h-4" />
                   </div>
-                  <span className="text-sm font-black uppercase tracking-wider text-neutral-900">
+                  <span className="font-artistic-serif text-sm font-black uppercase tracking-wider text-neutral-900">
                     Cài Đặt Photobooth
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-neutral-100 border border-neutral-200 text-neutral-700 flex items-center justify-center shadow-2xs">
-                    {activeTab === 'idle_screen' && <Sparkles className="w-4 h-4 text-amber-500" />}
+                    {activeTab === 'idle_screen' && <Clock className="w-4 h-4 text-amber-500" />}
                     {activeTab === 'capture_settings' && <Camera className="w-4 h-4 text-purple-600" />}
                     {activeTab === 'analytics' && <BarChart3 className="w-4 h-4 text-emerald-600" />}
                     {activeTab === 'storage' && <HardDrive className="w-4 h-4 text-amber-600" />}
                     {activeTab === 'security' && <Shield className="w-4 h-4 text-red-600" />}
                     {activeTab === 'booth_config' && <Sliders className="w-4 h-4 text-blue-600" />}
                   </div>
-                  <span className="text-sm font-black uppercase tracking-wider text-neutral-900">
+                  <span className="font-artistic-serif text-sm font-black uppercase tracking-wider text-neutral-900">
                     {activeTab === 'idle_screen' && 'Màn Hình Chờ'}
                     {activeTab === 'capture_settings' && 'Thiết Lập Chụp'}
                     {activeTab === 'analytics' && 'Thống Kê & Báo Cáo'}
@@ -570,7 +682,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               )}
             </div>
 
-            {/* GÓC PHẢI CỐ ĐỊNH: NÚT HOME + NÚT KHÓA LẠI + ĐÓNG */}
+            {/* GÓC PHẢI CỐ ĐỊNH: NÚT HOME + NÚT ÁP DỤNG DUY NHẤT (thay cho Khóa Lại + Lưu&Áp Dụng + X trước đây) */}
             <div className="flex items-center gap-2">
               {/* Nút HOME: Cho phép quay lại 6 Widget */}
               {activeTab !== null && (
@@ -585,25 +697,15 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </button>
               )}
 
-              {/* Nút KHÓA LẠI (MÃ PIN): Đặt cố định góc trên */}
+              {/* Nút ÁP DỤNG: Lưu toàn bộ thay đổi & đóng bảng quản trị lại (thay cho 3 nút Khóa Lại/Lưu&Áp Dụng/X cũ) */}
               <button
                 type="button"
-                onClick={handleAdminLogout}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-900 border border-amber-400/60 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
-                title="Khóa lại bảng quản trị (yêu cầu nhập mã PIN khi mở lại)"
+                onClick={handleSaveAllConfig}
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-95"
+                title="Lưu thay đổi và đóng bảng quản trị"
               >
-                <Lock className="w-3.5 h-3.5 text-amber-700" />
-                <span>Khóa Lại</span>
-              </button>
-
-              {/* Nút ĐÓNG X */}
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-8 h-8 rounded-xl bg-neutral-100 hover:bg-neutral-200 hover:text-red-600 text-neutral-600 flex items-center justify-center cursor-pointer transition-colors border border-neutral-300/80 active:scale-95"
-                title="Đóng bảng quản trị"
-              >
-                <X className="w-4 h-4" />
+                <Check className="w-3.5 h-3.5" />
+                <span>Áp Dụng</span>
               </button>
             </div>
           </div>
@@ -624,14 +726,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   >
                     <div className="flex items-start justify-between">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shadow-2xs group-hover:scale-105 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                        <Sparkles className="w-6 h-6 sm:w-7 sm:h-7" />
+                        <Clock className="w-6 h-6 sm:w-7 sm:h-7" />
                       </div>
                       <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
                     </div>
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-blue-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-blue-600 transition-colors">
                           Màn Hình Chờ
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -663,7 +765,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-purple-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-purple-600 transition-colors">
                           Thiết Lập Chụp
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -697,7 +799,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-emerald-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-emerald-600 transition-colors">
                           Thống Kê
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -729,7 +831,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-amber-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-amber-600 transition-colors">
                           Quản Lý Ảnh
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -761,7 +863,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-red-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-red-600 transition-colors">
                           Bảo Mật & PIN
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -794,7 +896,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
                     <div className="mt-4 space-y-1.5">
                       <div>
-                        <h4 className="text-base sm:text-lg font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">
                           Camera & Thiết Bị
                         </h4>
                         <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
@@ -825,13 +927,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-600" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
                           <span>Chế Độ Chiếu Tiêu Đề Sự Kiện</span>
                         </h4>
-                        <p className="text-[11px] text-neutral-500 mt-0.5">
-                          Bật để luân phiên hiển thị Tiêu đề Sự kiện và Logo Thương hiệu trên màn hình chờ.
-                        </p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input
@@ -1196,248 +1294,43 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             {/* TAB 2: THIẾT LẬP CHỤP & QUY TRÌNH (CAPTURE SETTINGS)           */}
             {/* ============================================================== */}
             {activeTab === 'capture_settings' && (
-              <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 items-start animate-in fade-in duration-200">
-                {/* CỘT 1: CHẾ ĐỘ CHỤP TỰ DO & THỜI GIAN ĐẾM NGƯỢC */}
-                <div className="space-y-5">
-                  {/* Card Nổi Bật: Chế Độ Chụp Tự Do (Free Capture Mode) */}
-                  <div className={`p-6 rounded-3xl border transition-all shadow-sm ${
-                    tempConfig.enableFreeCaptureMode
-                      ? 'bg-gradient-to-br from-blue-50 via-indigo-50/50 to-white border-blue-300'
-                      : 'bg-white border-[#DDD6C8]'
-                  }`}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                            tempConfig.enableFreeCaptureMode ? 'bg-blue-600 text-white' : 'bg-neutral-200 text-neutral-700'
-                          }`}>
-                            <Camera className="w-4 h-4" />
-                          </div>
-                          <h4 className="text-sm font-black uppercase tracking-wider text-neutral-900">
-                            Chế Độ Chụp Tự Do
-                          </h4>
-                          <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full ${
-                            tempConfig.enableFreeCaptureMode
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-neutral-200 text-neutral-700'
-                          }`}>
-                            {tempConfig.enableFreeCaptureMode ? 'ĐANG BẬT' : 'ĐANG TẮT'}
-                          </span>
+              <div className="max-w-3xl mx-auto animate-in fade-in duration-200">
+                {/* Card: Chế Độ Chụp Tự Do (Free Capture Mode) — cài đặt duy nhất còn ở tab này,
+                    các mục còn lại (đếm ngược, xem trước khung hình, âm thanh/flash/lưới/video)
+                    đã có sẵn và hoạt động thật trong popup "Tùy Chỉnh" trên màn hình chụp. */}
+                <div className={`p-6 rounded-3xl border transition-all shadow-sm ${
+                  tempConfig.enableFreeCaptureMode
+                    ? 'bg-gradient-to-br from-blue-50 via-indigo-50/50 to-white border-blue-300'
+                    : 'bg-white border-[#DDD6C8]'
+                }`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                          tempConfig.enableFreeCaptureMode ? 'bg-blue-600 text-white' : 'bg-neutral-200 text-neutral-700'
+                        }`}>
+                          <Camera className="w-4 h-4" />
                         </div>
-                        <p className="text-xs text-neutral-600 leading-relaxed mt-2">
-                          {tempConfig.enableFreeCaptureMode
-                            ? 'Khách chạm màn hình chờ sẽ vào thẳng máy ảnh chụp ảnh liên tục thoải mái không giới hạn số lượng. Sau khi chụp xong mới chọn layout khung in và chọn các ảnh ưng ý nhất.'
-                            : 'Quy trình tiêu chuẩn: Khách chọn bố cục khung in trước (2x2, 4-Strip, Polaroid...), sau đó hệ thống sẽ đếm ngược chụp đúng số lượng ảnh tương ứng.'}
-                        </p>
-                      </div>
-
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                        <input
-                          type="checkbox"
-                          checked={tempConfig.enableFreeCaptureMode ?? false}
-                          onChange={(e) =>
-                            setTempConfig({
-                              ...tempConfig,
-                              enableFreeCaptureMode: e.target.checked,
-                            })
-                          }
-                          className="sr-only peer"
-                        />
-                        <div className="w-12 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
-                      </label>
-                    </div>
-
-                    {/* Hộp giải thích quy trình */}
-                    <div className="mt-4 pt-4 border-t border-neutral-200/80 flex items-center gap-3 text-xs text-neutral-600">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
-                      <span>
-                        {tempConfig.enableFreeCaptureMode
-                          ? '✨ Ưu điểm: Khách thỏa sức tạo dáng nhiều kiểu, không sợ hết lượt hay áp lực chọn khung.'
-                          : '📋 Ưu điểm: Rõ ràng, tiết kiệm thời gian chụp cho sự kiện đông người.'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Thời Gian Đếm Ngược Countdown */}
-                  <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Timer className="w-4 h-4 text-neutral-700" />
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                          Thời Gian Đếm Ngược Mỗi Shot
+                        <h4 className="text-sm font-black uppercase tracking-wider text-neutral-900">
+                          Chế Độ Chụp Tự Do
                         </h4>
                       </div>
-                      <span className="text-xs font-bold text-blue-600">
-                        {tempConfig.countdownSeconds || 3} Giây
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-500">
-                      Khoảng thời gian chuẩn bị tạo dáng trước khi máy ảnh tự động bấm chụp.
-                    </p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { label: '3 Giây (Nhanh)', val: 3 },
-                        { label: '5 Giây (Chuẩn)', val: 5 },
-                        { label: '7 Giây (Rộng)', val: 7 },
-                        { label: '10 Giây (Nhóm)', val: 10 },
-                      ].map((opt) => (
-                        <button
-                          key={opt.val}
-                          type="button"
-                          onClick={() => setTempConfig({ ...tempConfig, countdownSeconds: opt.val })}
-                          className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
-                            (tempConfig.countdownSeconds || 3) === opt.val
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                              : 'bg-white text-neutral-700 border-[#DDD6C8] hover:bg-neutral-50'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Chế Độ Xem Trước Khung Hình (Slot Preview Mode) */}
-                  <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-neutral-700" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                        Chế Độ Xem Trước Khung Hình (Slot Preview)
-                      </h4>
-                    </div>
-                    <p className="text-[11px] text-neutral-500">
-                      Cách hiển thị hình ảnh trong lúc chụp và trong các ô bố cục.
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => onSetPreviewMode('fit')}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                          previewMode === 'fit'
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                            : 'bg-white text-neutral-800 border-[#DDD6C8] hover:bg-neutral-50'
-                        }`}
-                      >
-                        <span className="text-xs font-black uppercase">Khung Hình Thực (Photo Aspect)</span>
-                        <span className={`text-[11px] ${previewMode === 'fit' ? 'text-white/80' : 'text-neutral-500'}`}>
-                          Giữ trọn góc nhìn rộng, không bị cắt xén góc ảnh.
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => onSetPreviewMode('fill')}
-                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                          previewMode === 'fill'
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                            : 'bg-white text-neutral-800 border-[#DDD6C8] hover:bg-neutral-50'
-                        }`}
-                      >
-                        <span className="text-xs font-black uppercase">Lấp Đầy Ô (Square / Fill)</span>
-                        <span className={`text-[11px] ${previewMode === 'fill' ? 'text-white/80' : 'text-neutral-500'}`}>
-                          Ảnh phủ kín toàn bộ ô khung hình, phong cách Hàn Quốc.
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CỘT 2: CÁC HIỆU ỨNG HỖ TRỢ CHỤP (ÂM THANH, FLASH, LƯỚI, VIDEO) */}
-                <div className="space-y-5">
-                  {/* Hiệu Ứng Hỗ Trợ Chụp */}
-                  <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-amber-500" />
-                      <span>Trải Nghiệm & Hiệu Ứng Studio Khi Chụp</span>
-                    </h4>
-
-                    {/* Âm thanh & Khẩu lệnh */}
-                    <div className="flex items-center justify-between pt-1 pb-3 border-b border-neutral-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                          <Volume2 className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-neutral-900">Âm Thanh Đếm Ngược & Màn Trập</div>
-                          <div className="text-[11px] text-neutral-500">Phát tiếng tíc tắc đếm ngược và tiếng chụp tách chân thực</div>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={soundEnabled}
-                          onChange={onToggleSound}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
                     </div>
 
-                    {/* Flash Màn Hình */}
-                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                          <Zap className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-neutral-900">Hiệu Ứng Flash Màn Hình</div>
-                          <div className="text-[11px] text-neutral-500">Nhấp nháy trắng màn hình tạo hiệu ứng chụp studio & trợ sáng</div>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={flashEnabled}
-                          onChange={onToggleFlash}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Lưới Căn Chỉnh 3x3 */}
-                    <div className="flex items-center justify-between py-3 border-b border-neutral-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                          <Grid className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-neutral-900">Lưới Căn Chỉnh Tỉ Lệ Vàng (3x3)</div>
-                          <div className="text-[11px] text-neutral-500">Hiển thị đường gióng giúp khách căn đúng tâm bố cục ảnh</div>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={gridVisible}
-                          onChange={onToggleGrid}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Ghi Video Hậu Trường (Live Boomerang / Video) */}
-                    <div className="flex items-center justify-between pt-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
-                          <Video className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-neutral-900">Ghi Video Động Live / Boomerang</div>
-                          <div className="text-[11px] text-neutral-500">Tự động ghi clip ngắn 2 giây trước mỗi shot chụp để chia sẻ QR</div>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={recordVideoEnabled}
-                          onChange={onToggleRecordVideo}
-                          className="sr-only peer"
-                        />
-                        <div className="w-10 h-5 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                      <input
+                        type="checkbox"
+                        checked={tempConfig.enableFreeCaptureMode ?? false}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            enableFreeCaptureMode: e.target.checked,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-12 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -1634,6 +1527,135 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   </p>
                 </div>
 
+                {/* Khối Lưu Trữ Ảnh Trên Đám Mây (Cloudflare R2) — nguồn cho mã QR thật ở màn Chia Sẻ */}
+                <div className="p-4 bg-white rounded-2xl border border-purple-200 shadow-xs flex flex-col gap-3.5 bg-purple-50/20">
+                  <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-purple-600" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-purple-950">
+                        Lưu Trữ Ảnh Trên Đám Mây
+                      </h4>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        isCloudStorageConfigured(tempConfig.cloudStorage)
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-neutral-100 text-neutral-500'
+                      }`}
+                    >
+                      {isCloudStorageConfigured(tempConfig.cloudStorage) ? 'Đã Cấu Hình' : 'Chưa Cấu Hình'}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-neutral-600">
+                    Nơi lưu ảnh thật để mã QR ở màn Chia Sẻ trỏ tới đúng link tải của khách. Xem hướng
+                    dẫn tạo miễn phí trong thư mục <code className="bg-neutral-100 px-1 rounded">cloudflare-worker</code> đi
+                    kèm dự án. Mỗi máy có thể dùng 1 tài khoản riêng — đổi lại bất cứ lúc nào (ví dụ
+                    khi tài khoản cũ đầy dung lượng).
+                  </p>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                        Địa Chỉ Worker
+                      </label>
+                      <input
+                        type="text"
+                        value={tempConfig.cloudStorage?.workerUrl || ''}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            cloudStorage: { ...(tempConfig.cloudStorage || {}), workerUrl: e.target.value },
+                          })
+                        }
+                        placeholder="https://photobag-upload-worker.ten-tai-khoan.workers.dev"
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs font-mono text-neutral-800 focus:outline-purple-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                        Mã Token
+                      </label>
+                      <input
+                        type="text"
+                        value={tempConfig.cloudStorage?.uploadToken || ''}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            cloudStorage: { ...(tempConfig.cloudStorage || {}), uploadToken: e.target.value },
+                          })
+                        }
+                        placeholder="Mã bí mật đã đặt bằng lệnh wrangler secret put UPLOAD_TOKEN"
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs font-mono text-neutral-800 focus:outline-purple-400"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-neutral-400">
+                    Nhớ bấm nút <strong>"Áp Dụng"</strong> ở góc trên để lưu lại 2 ô trên.
+                  </p>
+
+                  {/* Danh sách ảnh đã lưu trên đám mây (dùng cấu hình ĐÃ ÁP DỤNG, không phải ô đang gõ) */}
+                  {isCloudStorageConfigured(eventConfig.cloudStorage) && (
+                    <div className="pt-2 border-t border-purple-200/70 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                          Ảnh Đã Lưu ({cloudObjects.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={refreshCloudObjects}
+                          disabled={cloudObjectsStatus === 'loading'}
+                          className="text-[10px] font-bold text-purple-700 flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${cloudObjectsStatus === 'loading' ? 'animate-spin' : ''}`} />
+                          Làm Mới
+                        </button>
+                      </div>
+
+                      {cloudObjectsError && <p className="text-[11px] text-rose-600">{cloudObjectsError}</p>}
+
+                      {cloudObjectsStatus === 'done' && cloudObjects.length === 0 && (
+                        <p className="text-[11px] text-neutral-500">Chưa có ảnh nào được lưu.</p>
+                      )}
+
+                      {cloudObjects.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {cloudObjects.map((obj) => (
+                            <div
+                              key={obj.key}
+                              className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg"
+                            >
+                              <a
+                                href={obj.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-neutral-700 font-mono truncate hover:underline flex-1"
+                              >
+                                {obj.key}
+                              </a>
+                              <span className="text-[10px] text-neutral-400 shrink-0">{formatCloudSize(obj.size)}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCloudObject(obj.key)}
+                                disabled={deletingCloudKey === obj.key}
+                                className="shrink-0 text-rose-500 hover:text-rose-700 disabled:opacity-50 cursor-pointer"
+                                title="Xóa ảnh này"
+                              >
+                                {deletingCloudKey === obj.key ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Khối Xuất Trọn Bộ File ZIP */}
                 <div className="p-4 bg-white rounded-2xl border border-blue-200 shadow-xs flex flex-col gap-3.5 bg-blue-50/20">
                   <div className="flex items-center justify-between border-b border-blue-200 pb-2">
@@ -1822,7 +1844,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="flex items-center gap-2">
                       <Shield className="w-4 h-4 text-blue-600" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-[#1A1A1A]">
-                        Thiết Lập Chế Độ Khóa Kiosk (Kiosk Lock)
+                        Thiết Lập Chế Độ Khóa Kiosk
                       </h4>
                     </div>
                   </div>
@@ -1862,7 +1884,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   </div>
 
                   {/* 2. Ẩn nút cài đặt trên màn hình (Mở bằng chạm 3 lần Logo) */}
-                  <div className="flex items-center justify-between py-1.5 border-b border-neutral-100">
+                  <div className="flex items-center justify-between py-1.5">
                     <div>
                       <h5 className="text-xs font-bold text-neutral-800">
                         Ẩn Biểu Tượng Cài Đặt (Mở Bằng Chạm 3 Lần Vào Logo)
@@ -1895,34 +1917,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     </label>
                   </div>
 
-                  {/* 3. Tự động phục hồi về màn hình chờ sau khi in */}
-                  <div className="flex items-center justify-between py-1.5">
-                    <div>
-                      <h5 className="text-xs font-bold text-neutral-800">
-                        Thời Gian Tự Về Màn Hình Chờ Khi Khách Rời Đi
-                      </h5>
-                      <p className="text-[11px] text-neutral-500">
-                        Sau khi khách chụp/in xong mà không thao tác gì, máy tự quay về màn hình chờ.
-                      </p>
-                    </div>
-                    <select
-                      value={tempConfig.idleTimeoutSeconds}
-                      onChange={(e) =>
-                        setTempConfig({
-                          ...tempConfig,
-                          idleTimeoutSeconds: parseInt(e.target.value, 10),
-                        })
-                      }
-                      className="px-3 py-1.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-bold text-neutral-800 focus:outline-emerald-500"
-                    >
-                      <option value={30}>30 Giây</option>
-                      <option value={45}>45 Giây</option>
-                      <option value={60}>60 Giây (Mặc định)</option>
-                      <option value={90}>90 Giây</option>
-                      <option value={120}>2 Phút</option>
-                      <option value={0}>Tắt Tự Động Về</option>
-                    </select>
-                  </div>
                 </div>
               </div>
             )}
@@ -1931,95 +1925,175 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             {/* TAB 6: CẤU HÌNH CAMERA & PHẦN CỨNG (CAMERA & HARDWARE)         */}
             {/* ============================================================== */}
             {activeTab === 'booth_config' && (
-              <div className="max-w-7xl mx-auto space-y-5 animate-in fade-in duration-200">
-                {/* 1. Trạng Thái Cảm Biến Camera & Thiết Bị Đầu Vào */}
+              <div className="max-w-3xl mx-auto space-y-5 animate-in fade-in duration-200">
+                {/* 1. Danh Sách Camera Thật (đọc trực tiếp từ trình duyệt) */}
                 <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
                     <div className="flex items-center gap-2">
                       <Camera className="w-5 h-5 text-purple-600" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                        Cảm Biến & Thiết Bị Camera
+                        Camera Đang Có Trên Máy Này
                       </h4>
                     </div>
-                    <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span>Sẵn Sàng Chụp</span>
-                    </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between">
-                      <span className="text-xs font-bold text-neutral-700 block mb-1">Độ Phân Giải Tối Ưu</span>
-                      <span className="text-sm font-mono font-bold text-neutral-900">1920 × 1080 (Full HD)</span>
-                      <span className="text-[10.5px] text-neutral-500 mt-1">Tự động cân bằng sáng ISP</span>
-                    </div>
+                  {cameraDevicesError && (
+                    <p className="text-[11px] text-red-600">{cameraDevicesError}</p>
+                  )}
 
-                    <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between">
-                      <span className="text-xs font-bold text-neutral-700 block mb-1">Tốc Độ Khung Hình</span>
-                      <span className="text-sm font-mono font-bold text-neutral-900">30 / 60 FPS mượt mà</span>
-                      <span className="text-[10.5px] text-neutral-500 mt-1">Không có độ trễ xem trước</span>
-                    </div>
+                  {!cameraDevicesError && cameraDevices.length === 0 && (
+                    <p className="text-[11px] text-neutral-500">
+                      Đang tìm camera... Nếu không thấy gì, hãy cấp quyền camera cho trình duyệt rồi mở lại tab này.
+                    </p>
+                  )}
 
-                    <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 flex flex-col justify-between">
-                      <span className="text-xs font-bold text-neutral-700 block mb-1">Tỉ Lệ Khung Hình Cảm Biến</span>
-                      <span className="text-sm font-mono font-bold text-neutral-900">3:4 / 4:3 Studio Standard</span>
-                      <span className="text-[10.5px] text-neutral-500 mt-1">Tương thích mọi bố cục in</span>
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {/* Tuỳ chọn "Tự động" — dùng cameraFacing mặc định thay vì chỉ định 1 thiết bị cụ thể */}
+                    <button
+                      type="button"
+                      onClick={() => onSelectCameraId && onSelectCameraId(null)}
+                      title="Tự Động (Mặc Định) — để hệ thống tự chọn camera trước/sau của máy."
+                      className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border text-left transition-all ${
+                        !selectedCameraId
+                          ? 'bg-purple-50 border-purple-300'
+                          : 'bg-neutral-50 border-neutral-200 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold text-neutral-800 truncate">Tự Động (Mặc Định)</span>
+                      {!selectedCameraId && (
+                        <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[9px] font-bold rounded-full shrink-0">
+                          ĐANG DÙNG
+                        </span>
+                      )}
+                    </button>
+
+                    {cameraDevices.map((device, index) => {
+                      const isSelected = selectedCameraId === device.deviceId;
+                      const label = device.label || `Camera ${index + 1}`;
+                      return (
+                        <button
+                          key={device.deviceId || index}
+                          type="button"
+                          onClick={() => onSelectCameraId && onSelectCameraId(device.deviceId)}
+                          title={label}
+                          className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border text-left transition-all ${
+                            isSelected
+                              ? 'bg-purple-50 border-purple-300'
+                              : 'bg-neutral-50 border-neutral-200 hover:bg-neutral-100'
+                          }`}
+                        >
+                          <span className="text-[11px] font-bold text-neutral-800 truncate">{label}</span>
+                          {isSelected && (
+                            <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[9px] font-bold rounded-full shrink-0">
+                              ĐANG DÙNG
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
+
+                  <p className="text-[11px] text-neutral-400">
+                    Mẹo: nếu máy đang chạy PhotoBag là máy tính (Windows/Mac), có thể dùng app webcam ảo (DroidCam, Iriun Webcam, EpocCam...) rồi chọn tên thiết bị đó ở trên. Nếu máy đang chạy PhotoBag là máy tính bảng, dùng mục "Ghép Camera Điện Thoại Qua Wifi" bên dưới.
+                  </p>
                 </div>
 
-                {/* 2. Cấu Hình Máy In Nhiệt & Kết Nối Thiết Bị Ngoại Vi */}
+                {/* 1.5. Ghép Camera Điện Thoại Qua Wifi (không cần cài phần mềm trên máy chính) */}
                 <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
                     <div className="flex items-center gap-2">
-                      <Printer className="w-5 h-5 text-blue-600" />
+                      <Wifi className="w-5 h-5 text-purple-600" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                        Cấu Hình Máy In Nhiệt & Thiết Bị Ngoại Vi
+                        Ghép Camera Điện Thoại Qua Wifi
                       </h4>
                     </div>
-                    <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[11px] font-bold rounded-full">
-                      DNP / Hiti / Canon Selphy
-                    </span>
+                    {phonePairingStatus === 'connected' && (
+                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>{phonePairingDeviceLabel ? `Đã Kết Nối: ${phonePairingDeviceLabel}` : 'Đã Kết Nối'}</span>
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 space-y-2">
-                      <span className="text-xs font-bold text-neutral-800 block">Kích Thước Giấy In Chuẩn</span>
+                  {(phonePairingStatus === 'idle' || phonePairingStatus === 'error') && (
+                    <div className="space-y-3">
                       <p className="text-[11px] text-neutral-500 leading-relaxed">
-                        Hỗ trợ in khổ 4x6 inch (10x15cm) và 2x6 inch (5x15cm photostrip dải đôi cắt sẵn).
+                        Dùng một điện thoại khác làm camera rời, gửi hình sang máy này qua Wifi — không cần cài phần mềm gì trên máy này.
                       </p>
+                      {phonePairingError && (
+                        <p className="text-[11px] text-red-600">{phonePairingError}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onStartPhonePairing && onStartPhonePairing()}
+                        className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                      >
+                        Tạo Mã Ghép Nối
+                      </button>
                     </div>
+                  )}
 
-                    <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200 space-y-2">
-                      <span className="text-xs font-bold text-neutral-800 block">Chế Độ Tự Động Gửi Lệnh In</span>
-                      <p className="text-[11px] text-neutral-500 leading-relaxed">
-                        Cho phép khách tự bấm in tại bước chia sẻ hoặc kích hoạt in tự động ngay sau khi hoàn tất.
-                      </p>
+                  {phonePairingStatus === 'starting' && (
+                    <div className="flex items-center gap-2 text-xs text-neutral-500 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Đang tạo mã ghép nối...
                     </div>
+                  )}
+
+                  {(phonePairingStatus === 'waiting' || phonePairingStatus === 'connected') && phonePairingCode && (
+                    <div className="flex flex-col sm:flex-row items-center gap-5">
+                      {pairingQrSvg && (
+                        <div
+                          className="w-32 h-32 shrink-0 bg-white rounded-xl border border-neutral-200 p-2"
+                          dangerouslySetInnerHTML={{ __html: pairingQrSvg }}
+                        />
+                      )}
+                      <div className="flex-1 space-y-2 text-center sm:text-left">
+                        <p className="text-[11px] text-neutral-500">
+                          Trên điện thoại: quét mã QR này, hoặc mở trình duyệt và nhập mã số bên dưới.
+                        </p>
+                        <div className="text-3xl font-mono font-black tracking-[0.2em] text-neutral-900">
+                          {phonePairingCode}
+                        </div>
+                        <p className="text-[11px] font-bold">
+                          {phonePairingStatus === 'connected' ? (
+                            <span className="text-emerald-600">
+                              {phonePairingDeviceLabel ? `"${phonePairingDeviceLabel}" đã kết nối` : 'Điện thoại đã kết nối'} — đang dùng làm camera chính.
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400">Đang chờ điện thoại kết nối...</span>
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => onStopPhonePairing && onStopPhonePairing()}
+                          className="text-[11px] text-red-600 underline underline-offset-2"
+                        >
+                          {phonePairingStatus === 'connected' ? 'Xóa Thiết Bị Này / Ngắt Kết Nối' : 'Hủy Ghép Nối'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Máy In */}
+                <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-2">
+                  <div className="flex items-center gap-2 border-b border-neutral-100 pb-3">
+                    <Printer className="w-5 h-5 text-blue-600" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                      Máy In
+                    </h4>
                   </div>
+                  <p className="text-[11px] text-neutral-500 leading-relaxed">
+                    Khi in, chọn máy in mong muốn trong hộp thoại in của trình duyệt.
+                  </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* MODAL FOOTER */}
-          <div className="px-5 sm:px-6 py-3.5 bg-white border-t border-[#DDD6C8] flex items-center justify-end shrink-0 gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-700 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer active:scale-95"
-            >
-              Đóng
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAllConfig}
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="w-4 h-4" />
-              <span>Lưu & Áp Dụng</span>
-            </button>
-          </div>
+          {/* Đã bỏ footer Lưu & Áp Dụng riêng — thay bằng 1 nút "Áp Dụng" duy nhất
+              ở góc trên bên phải (cạnh Trang Chủ), áp dụng cho mọi tab. */}
         </div>
       )}
     </div>

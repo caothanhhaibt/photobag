@@ -729,6 +729,7 @@ export default function App() {
         phonePairingStatus={phoneCameraPairing.status}
         phonePairingCode={phoneCameraPairing.pairingCode}
         phonePairingError={phoneCameraPairing.errorMessage}
+        phonePairingDeviceLabel={phoneCameraPairing.connectedDeviceLabel}
         onStartPhonePairing={phoneCameraPairing.startPairing}
         onStopPhonePairing={phoneCameraPairing.stopPairing}
       />
