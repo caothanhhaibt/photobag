@@ -1,0 +1,10 @@
+{
+  "name": "Photobag",
+  "description": "Professional-grade studio photobooth with live camera capture, countdown timer, filters, photostrip builder, and instant export.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
