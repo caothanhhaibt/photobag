@@ -493,6 +493,16 @@ export default function App() {
   // Đã gán đủ ô hậu kỳ ở Thư Viện chưa (GalleryScreen báo ra) — dùng để bật/tắt nút "In"
   const [galleryIsComplete, setGalleryIsComplete] = useState<boolean>(false);
 
+  // Chế độ Biên Tập / Xuất Bản của màn Chia Sẻ — nâng lên đây vì cả TopAppBar (hiển thị + điều
+  // khiển nút chuyển đổi góc trên phải) lẫn ShareScreen (đọc để hiển thị đúng nội dung) đều cần.
+  const [shareActiveMode, setShareActiveMode] = useState<'edit' | 'export'>('edit');
+  // Mỗi lần vào lại màn Chia Sẻ (dù từ In Nhanh hay từ nút "In" ở Thư Viện) đều bắt đầu ở Biên Tập.
+  useEffect(() => {
+    if (currentScreen === 'share') {
+      setShareActiveMode('edit');
+    }
+  }, [currentScreen]);
+
   // ==========================================
   // ĐỒNG HỒ ĐẾM NGƯỢC PHIÊN THUÊ MÁY (CHẾ ĐỘ PHOTOBOOTH / MUA GIỜ)
   // ==========================================
@@ -649,6 +659,8 @@ export default function App() {
           photoboothRemainingSeconds={photoboothRemainingSeconds}
           onTriggerGalleryPrint={handleTriggerGalleryPrint}
           galleryPrintReady={galleryIsComplete}
+          shareActiveMode={shareActiveMode}
+          onSetShareActiveMode={setShareActiveMode}
           onOpenAdminDashboard={() => {
             setAdminInitialTab(null);
             setIsAdminModalOpen(true);
@@ -736,7 +748,7 @@ export default function App() {
           )}
 
           {currentScreen === 'share' && (
-            <div className="w-full h-full pt-14 sm:pt-16 pb-8 overflow-y-auto overflow-x-hidden overscroll-contain">
+            <div className="w-full h-full pt-14 sm:pt-16 overflow-hidden">
               <ShareScreen
                 onNavigate={handleNavigate}
                 capturedPhotos={recentSessionPhotos.length > 0 ? recentSessionPhotos : capturedPhotos}
@@ -750,6 +762,8 @@ export default function App() {
                 onUpdatePhotoFilter={handleUpdatePhotoFilter}
                 onApplyFilterToAll={handleApplyFilterToAll}
                 onUpdateConsent={handleUpdateConsent}
+                activeMode={shareActiveMode}
+                onSetActiveMode={setShareActiveMode}
               />
             </div>
           )}
