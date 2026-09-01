@@ -123,7 +123,13 @@ export type FrameStyle =
   | 'cinema-film'
   | 'movie-ticket'
   | 'polaroid'
-  | 'vinyl-cd';
+  | 'vinyl-cd'
+  | 'nutrition-label'
+  | 'scrapbook'
+  | 'concert-ticket'
+  | 'vinyl-foldcard'
+  | 'branded-foldcard'
+  | 'train-ticket';
 
 export type SlotPreviewMode = 'none' | 'bottom-slots' | 'paper-strip';
 
