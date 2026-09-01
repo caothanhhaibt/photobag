@@ -1,4 +1,4 @@
-import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization } from '../types';
+import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker } from '../types';
 import { FILTER_PRESETS, FRAME_COLORS, LAYOUT_OPTIONS } from '../constants/filters';
 
 /**
@@ -784,6 +784,9 @@ export async function generatePhotostripCanvas(params: {
   slotCustomizations?: SlotCustomization[];
   overrideFilterId?: string;
   overrideFilterIntensity?: number;
+  // Sticker khách kéo thả lên tờ ảnh ở màn Biên Tập — vị trí/cỡ/góc xoay lưu theo % nên vẽ đúng lại
+  // ở đây dù canvas in 300 DPI có kích thước pixel khác hẳn khung xem trước trên màn hình.
+  stickers?: PlacedSticker[];
 }): Promise<HTMLCanvasElement> {
   const {
     photos,
@@ -797,6 +800,7 @@ export async function generatePhotostripCanvas(params: {
     slotCustomizations = [],
     overrideFilterId,
     overrideFilterIntensity,
+    stickers = [],
   } = params;
 
   const frameInfo = FRAME_COLORS.find((f) => f.id === frameColor) || FRAME_COLORS[0];
@@ -906,6 +910,22 @@ export async function generatePhotostripCanvas(params: {
     isDouble,
     orientation,
   });
+
+  // 6. DRAW STICKERS ON TOP — vẽ sau cùng để luôn nổi trên ảnh/khung/chữ, đúng vị trí/cỡ/góc xoay
+  // khách đã chỉnh ở khung xem trước (quy đổi từ % sang pixel thật của canvas in).
+  for (const sticker of stickers) {
+    ctx.save();
+    const cx = (sticker.xPercent / 100) * canvasWidth;
+    const cy = (sticker.yPercent / 100) * canvasHeight;
+    ctx.translate(cx, cy);
+    ctx.rotate((sticker.rotation * Math.PI) / 180);
+    const fontSize = canvasWidth * 0.11 * sticker.scale;
+    ctx.font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sticker.emoji, 0, 0);
+    ctx.restore();
+  }
 
   return canvas;
 }
