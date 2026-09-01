@@ -15,7 +15,7 @@ import { IdleScreen, DEFAULT_EVENT_CONFIG } from './components/IdleScreen';
 import { AdminDashboardModal, AdminTab } from './components/AdminDashboardModal';
 import { SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, LAYOUT_OPTIONS } from './constants/filters';
 import { AnalyticsStats } from './types';
-import { Clock, RotateCcw } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { usePhoneCameraPairing } from './hooks/usePhoneCameraPairing';
 
 const STORAGE_KEY = 'photobooth_photos_v1';
@@ -60,7 +60,6 @@ export default function App() {
   const [selectedLayout, setSelectedLayout] = useState<StripLayout>('strip-3');
   const [selectedFrameColor, setSelectedFrameColor] = useState<FrameColor>('white');
   const [selectedFrameStyle, setSelectedFrameStyle] = useState<FrameStyle>('classic');
-  const [isBackgroundDrawerOpen, setIsBackgroundDrawerOpen] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [isLiveStream, setIsLiveStream] = useState<boolean>(true);
   const [sessionMode, setSessionMode] = useState<'single' | 'strip-3' | 'strip-4'>('strip-3');
@@ -77,13 +76,18 @@ export default function App() {
   const phoneCameraPairing = usePhoneCameraPairing();
   const [recordVideoEnabled, setRecordVideoEnabled] = useState<boolean>(true);
   const [recentSessionVideoUrl, setRecentSessionVideoUrl] = useState<string | null>(null);
+  // Độ sáng camera (điều khiển qua 2 thanh trượt trong bảng "Tùy Chỉnh" ở logo, giao diện chụp ảnh)
+  const [brightness, setBrightness] = useState<number>(100);
 
   // Cấu hình sự kiện & Màn hình chờ (Idle Screen)
   const [eventConfig, setEventConfig] = useState<EventConfig>(() => {
     try {
       const saved = localStorage.getItem(EVENT_CONFIG_KEY);
       if (saved) {
-        return { ...DEFAULT_EVENT_CONFIG, ...JSON.parse(saved) };
+        // Ép kiểu Partial<EventConfig> ở đây: JSON.parse() trả về `any`, nếu không ép kiểu thì việc
+        // spread nó vào object literal bên dưới sẽ làm TypeScript suy luận toàn bộ literal thành `any`,
+        // khiến tsc không còn kiểm tra được các chỗ dùng eventConfig.* trong cả file này nữa.
+        return { ...DEFAULT_EVENT_CONFIG, ...(JSON.parse(saved) as Partial<EventConfig>) };
       }
     } catch {
       // Storage access issue
@@ -205,9 +209,6 @@ export default function App() {
   const handleToggleRecordVideo = () => {
     setRecordVideoEnabled((prev) => !prev);
   };
-
-  // Trạng thái mở/đóng thanh cuộn bố cục ngang trên nút chụp
-  const [isLayoutDrawerOpen, setIsLayoutDrawerOpen] = useState<boolean>(true);
 
   // Initial photos seed
   const [capturedPhotos, setCapturedPhotos] = useState<CapturedPhoto[]>(() => {
@@ -456,14 +457,70 @@ export default function App() {
     }
   }, [currentScreen, resetActivity]);
 
-  // Bắt đầu phiên chụp từ Màn hình chờ:
-  // - Nếu bật Chế độ chụp tự do -> Vào thẳng máy ảnh (tự do chụp, sau đó mới vào tab chia sẻ chọn bố cục)
-  // - Nếu tắt -> Vào màn hình Chọn Bố Cục trước (UX thông thường)
+  // Trigger "In Nhanh" (Chế Độ Sự Kiện) — đăng ký từ CameraScreen, kích hoạt từ nút góc trên phải
+  // trong TopAppBar (qua logo), theo đúng mẫu đã dùng cho nút chụp nổi ở BottomNavBar.
+  const quickPrintTriggerRef = React.useRef<(() => void) | null>(null);
+
+  const handleRegisterQuickPrint = React.useCallback((triggerFn: () => void) => {
+    quickPrintTriggerRef.current = triggerFn;
+  }, []);
+
+  const handleTriggerQuickPrint = React.useCallback(() => {
+    resetActivity();
+    if (currentScreen === 'camera' && quickPrintTriggerRef.current) {
+      quickPrintTriggerRef.current();
+    }
+  }, [currentScreen, resetActivity]);
+
+  // Số ảnh đang có ở khung xem trước hiện tại (CameraScreen báo ra) — dùng để bật/tắt nút In Nhanh
+  const [burstPhotoCountInProgress, setBurstPhotoCountInProgress] = useState<number>(0);
+
+  // ==========================================
+  // ĐỒNG HỒ ĐẾM NGƯỢC PHIÊN THUÊ MÁY (CHẾ ĐỘ PHOTOBOOTH / MUA GIỜ)
+  // ==========================================
+  const photoboothSessionStartRef = React.useRef<number | null>(null);
+  const [photoboothRemainingSeconds, setPhotoboothRemainingSeconds] = useState<number | null>(null);
+
+  // Khi quay về màn hình chờ (do khách chụp xong, hết giờ, hay Idle Timeout) thì luôn hủy phiên đếm giờ.
+  useEffect(() => {
+    if (currentScreen === 'idle') {
+      photoboothSessionStartRef.current = null;
+      setPhotoboothRemainingSeconds(null);
+    }
+  }, [currentScreen]);
+
+  // Bộ đếm đồng hồ phiên: 1 interval chạy suốt vòng đời app, chỉ thực sự đếm khi có phiên Photobooth
+  // đang mở (photoboothSessionStartRef khác null); hết giờ thì tự quay về màn chờ.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (photoboothSessionStartRef.current === null) return;
+      const duration = eventConfig.photoboothSessionDurationSeconds ?? 300;
+      const elapsed = Math.floor((Date.now() - photoboothSessionStartRef.current) / 1000);
+      const remaining = duration - elapsed;
+      if (remaining <= 0) {
+        photoboothSessionStartRef.current = null;
+        setPhotoboothRemainingSeconds(null);
+        setCurrentScreen('idle');
+      } else {
+        setPhotoboothRemainingSeconds(remaining);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [eventConfig.photoboothSessionDurationSeconds]);
+
+  // Bắt đầu phiên chụp từ Màn hình chờ, theo 1 trong 3 chế độ chụp:
+  // - 'free' (Chụp Tự Do): Vào thẳng máy ảnh, tự do chụp không giới hạn, sau đó qua Thư Viện tự chọn ảnh.
+  // - 'event' / 'photobooth': Vào màn hình Chọn Bố Cục trước như thường lệ.
+  //   Riêng 'photobooth' (Mua Giờ) còn khởi động luôn đồng hồ đếm ngược thời lượng thuê máy.
   const handleStartFromIdle = () => {
     resetActivity();
-    if (eventConfig.enableFreeCaptureMode) {
+    if (eventConfig.captureMode === 'photobooth') {
+      photoboothSessionStartRef.current = Date.now();
+      setPhotoboothRemainingSeconds(eventConfig.photoboothSessionDurationSeconds ?? 300);
+    }
+    if (eventConfig.captureMode === 'free') {
       setCurrentScreen('camera');
-      setIsBackgroundDrawerOpen(false);
     } else {
       setCurrentScreen('layout');
     }
@@ -484,7 +541,6 @@ export default function App() {
       }
     }
     setCurrentScreen('camera');
-    setIsBackgroundDrawerOpen(false);
   };
 
   // Điều hướng thông minh
@@ -492,15 +548,9 @@ export default function App() {
     resetActivity();
     if (screen === 'filters') {
       setCurrentScreen('camera');
-      setIsBackgroundDrawerOpen(true);
     } else {
       setCurrentScreen(screen);
     }
-  };
-
-  const handleToggleBackgroundDrawer = () => {
-    resetActivity();
-    setIsBackgroundDrawerOpen((prev) => !prev);
   };
 
   // Gán 1 lượt chụp (nhóm ảnh) từ Thư Viện làm nguồn cho màn Chia Sẻ, để khách có thể
@@ -572,6 +622,13 @@ export default function App() {
           currentFilterId={currentFilterId}
           currentFilterIntensity={currentFilterIntensity}
           onSelectFilter={handleSelectFilter}
+          onChangeIntensity={setCurrentFilterIntensity}
+          brightness={brightness}
+          onChangeBrightness={setBrightness}
+          captureMode={eventConfig.captureMode}
+          burstPhotoCount={burstPhotoCountInProgress}
+          onTriggerQuickPrint={handleTriggerQuickPrint}
+          photoboothRemainingSeconds={photoboothRemainingSeconds}
           onOpenAdminDashboard={() => {
             setAdminInitialTab(null);
             setIsAdminModalOpen(true);
@@ -634,9 +691,12 @@ export default function App() {
                 currentFilterIntensity={currentFilterIntensity}
                 onSelectFilter={handleSelectFilter}
                 onChangeIntensity={setCurrentFilterIntensity}
-                showBackgroundDrawer={isBackgroundDrawerOpen}
-                onToggleBackgroundDrawer={handleToggleBackgroundDrawer}
-                isFreeCapture={eventConfig.enableFreeCaptureMode}
+                brightness={brightness}
+                onChangeBrightness={setBrightness}
+                isFreeCapture={eventConfig.captureMode === 'free'}
+                captureMode={eventConfig.captureMode}
+                onRegisterQuickPrintTrigger={handleRegisterQuickPrint}
+                onUpdateBurstPhotoCount={setBurstPhotoCountInProgress}
               />
             </div>
           )}
@@ -647,8 +707,8 @@ export default function App() {
                 onNavigate={handleNavigate}
                 capturedPhotos={capturedPhotos}
                 onDeletePhoto={handleDeletePhoto}
-                onSelectPhotoForFilter={setActivePhoto}
-                onUseSessionForShare={handleUseSessionForShare}
+                selectedLayout={selectedLayout}
+                onConfirmSelection={handleUseSessionForShare}
               />
             </div>
           )}
@@ -704,8 +764,6 @@ export default function App() {
           currentScreen={currentScreen}
           onNavigate={handleNavigate}
           onTriggerShutter={handleTriggerShutter}
-          isBackgroundDrawerOpen={isBackgroundDrawerOpen}
-          onToggleBackgroundDrawer={handleToggleBackgroundDrawer}
           shutterLabel={shutterLabel}
         />
       )}

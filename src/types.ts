@@ -2,6 +2,15 @@ export type AppScreen = 'idle' | 'layout' | 'camera' | 'filters' | 'gallery' | '
 
 export type EventTheme = 'wedding' | 'birthday' | 'corporate' | 'neon' | 'korean' | 'vintage';
 
+// 3 chế độ vận hành máy — chỉ được bật đúng 1 chế độ tại một thời điểm, độc lập hoàn toàn với
+// công tắc "chế độ tiêu đề sự kiện" (enableEventTitleMode) vì đó chỉ là hiệu ứng hiển thị màn hình chờ.
+// - 'event': Chế Độ Sự Kiện — khách đông, mỗi nhóm chụp 1 lượt, có nút "In Nhanh" lấy thẳng ảnh
+//   ở khung xem trước vào hậu kỳ, bỏ qua bước chọn ảnh ở Thư Viện.
+// - 'photobooth': Photobooth / Mua Giờ — chế độ mặc định, khách thuê máy theo phiên có giới hạn
+//   thời gian (cấu hình ở photoboothSessionDurationSeconds), hiện đồng hồ đếm ngược.
+// - 'free': Chụp Tự Do — dành cho test hoặc khách thuê máy thời lượng lớn, không giới hạn.
+export type CaptureMode = 'event' | 'photobooth' | 'free';
+
 export interface AnalyticsStats {
   totalSessions: number;
   totalPhotosCaptured: number;
@@ -54,7 +63,8 @@ export interface EventConfig {
   titleAlternateIntervalSeconds: number; // Mặc định 60 giây
   titleSize?: 'sm' | 'md' | 'lg' | 'xl'; // Kích thước chữ tiêu đề: Nhỏ (sm), Vừa (md), Lớn (lg), Cực Đại (xl)
   showLogoBorder?: boolean; // Bật / Tắt khung viền bao quanh ảnh (mặc định bật)
-  enableFreeCaptureMode?: boolean; // Bật chế độ chụp tự do (chụp thoải mái, sau đó mới chọn bố cục & chọn ảnh trong tab chia sẻ)
+  captureMode: CaptureMode; // 3 chế độ chụp (xem định nghĩa CaptureMode) — mặc định 'photobooth'
+  photoboothSessionDurationSeconds?: number; // Thời lượng 1 phiên thuê máy cho chế độ 'photobooth' (giây), mặc định 300 (5 phút)
   security?: KioskSecurityConfig;
   cloudStorage?: CloudStorageConfig;
 }
