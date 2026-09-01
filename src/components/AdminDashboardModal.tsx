@@ -1390,6 +1390,24 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                           </button>
                         ))}
                       </div>
+
+                      {/* Nhập số phút tùy ý — không chỉ giới hạn ở 4 mốc có sẵn */}
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-500">Hoặc nhập số phút khác:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={180}
+                          value={Math.round((tempConfig.photoboothSessionDurationSeconds || 300) / 60)}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            const mins = Number.isFinite(raw) ? Math.max(1, Math.min(180, Math.round(raw))) : 1;
+                            setTempConfig({ ...tempConfig, photoboothSessionDurationSeconds: mins * 60 });
+                          }}
+                          className="w-16 px-2 py-1.5 rounded-lg border border-[#DDD6C8] text-xs font-bold text-center text-neutral-900 focus:outline-hidden focus:border-blue-500"
+                        />
+                        <span className="text-[11px] text-neutral-500">phút (1–180)</span>
+                      </div>
                     </div>
                   )}
                 </div>

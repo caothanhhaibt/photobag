@@ -65,6 +65,9 @@ interface TopAppBarProps {
   burstPhotoCount?: number;
   onTriggerQuickPrint?: () => void;
   photoboothRemainingSeconds?: number | null;
+  // Nút "In" ở giao diện Thư Viện — góc trên phải, đối xứng với nút "Chụp Ảnh" (camera) góc trên trái.
+  onTriggerGalleryPrint?: () => void;
+  galleryPrintReady?: boolean;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -102,6 +105,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   burstPhotoCount = 0,
   onTriggerQuickPrint,
   photoboothRemainingSeconds = null,
+  onTriggerGalleryPrint,
+  galleryPrintReady = false,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Bảng Tùy Chỉnh giờ chỉ mở được ở giao diện chụp ảnh, kích hoạt bằng cách bấm vào logo (xem khối
@@ -369,6 +374,24 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
 
             {/* Chế Độ Chụp Tự Do: không hiện gì ở vị trí này */}
           </>
+        )}
+
+        {/* Giao diện Thư Viện: nút "In" — đối xứng với nút "Chụp Ảnh" (camera icon) ở góc trên trái */}
+        {currentScreen === 'gallery' && (
+          <button
+            id="top-bar-gallery-print-btn"
+            onClick={onTriggerGalleryPrint}
+            disabled={!galleryPrintReady}
+            className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full font-sans text-[10px] sm:text-xs uppercase tracking-[0.15em] font-bold transition-all active:scale-95 shadow-[0_4px_16px_rgba(0,0,0,0.35)] border ${
+              galleryPrintReady
+                ? 'bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] border-white/20 cursor-pointer'
+                : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
+            }`}
+            title="In dải ảnh đã gán đủ ô"
+          >
+            <span className="material-symbols-outlined text-[16px] sm:text-[18px]">print</span>
+            <span>In</span>
+          </button>
         )}
 
         {/* BẢNG ĐIỀU KHIỂN CHỨC NĂNG PHỤ (FLOATING SETTINGS DRAWER / POPOVER) — chỉ mở được ở giao
