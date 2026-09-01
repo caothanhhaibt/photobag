@@ -197,7 +197,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
                 Tất Cả Ảnh ({capturedPhotos.length})
               </h3>
-              <span className="text-[10px] font-sans text-[#1A1A1A]/50">Mới nhất trước — bấm ảnh để đưa vào ô →</span>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">

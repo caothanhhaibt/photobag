@@ -24,6 +24,7 @@ import {
   X,
   ChevronRight,
   Shield,
+  Share2,
 } from 'lucide-react';
 import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, CaptureMode } from '../types';
 import { FILTER_PRESETS } from '../constants/filters';
@@ -68,6 +69,10 @@ interface TopAppBarProps {
   // Nút "In" ở giao diện Thư Viện — góc trên phải, đối xứng với nút "Chụp Ảnh" (camera) góc trên trái.
   onTriggerGalleryPrint?: () => void;
   galleryPrintReady?: boolean;
+  // Chuyển đổi Biên Tập / Xuất Bản ở giao diện Chia Sẻ — góc trên phải, đối xứng với nút "Chụp Ảnh"
+  // góc trên trái (đã chuyển từ nằm trong ShareScreen ra đây để nhất quán với các màn khác).
+  shareActiveMode?: 'edit' | 'export';
+  onSetShareActiveMode?: (mode: 'edit' | 'export') => void;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -107,6 +112,8 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   photoboothRemainingSeconds = null,
   onTriggerGalleryPrint,
   galleryPrintReady = false,
+  shareActiveMode = 'edit',
+  onSetShareActiveMode,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Bảng Tùy Chỉnh giờ chỉ mở được ở giao diện chụp ảnh, kích hoạt bằng cách bấm vào logo (xem khối
@@ -392,6 +399,37 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">print</span>
             <span>In</span>
           </button>
+        )}
+
+        {/* Giao diện Biên Tập & Xuất Bản: chuyển đổi 2 chế độ — đối xứng với nút "Chụp Ảnh" góc trên trái.
+            Chỉ hiện chữ nhãn từ sm trở lên — màn điện thoại hẹp chỉ hiện icon để không đè lên logo giữa. */}
+        {currentScreen === 'share' && onSetShareActiveMode && (
+          <div className="flex items-center bg-black/60 backdrop-blur-md p-1 rounded-full border border-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.35)] shrink-0">
+            <button
+              id="top-bar-share-edit-btn"
+              onClick={() => onSetShareActiveMode('edit')}
+              className={`px-2 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-sans text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                shareActiveMode === 'edit'
+                  ? 'bg-white text-[#1A1A1A] shadow-xs'
+                  : 'text-white/70 hover:text-white'
+              }`}
+            >
+              <Sliders className="w-3 h-3" />
+              <span className="hidden sm:inline">Biên Tập</span>
+            </button>
+            <button
+              id="top-bar-share-export-btn"
+              onClick={() => onSetShareActiveMode('export')}
+              className={`px-2 py-1.5 sm:px-3.5 sm:py-2 rounded-full font-sans text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                shareActiveMode === 'export'
+                  ? 'bg-white text-[#1A1A1A] shadow-xs'
+                  : 'text-white/70 hover:text-white'
+              }`}
+            >
+              <Share2 className="w-3 h-3" />
+              <span className="hidden sm:inline">Xuất Bản</span>
+            </button>
+          </div>
         )}
 
         {/* BẢNG ĐIỀU KHIỂN CHỨC NĂNG PHỤ (FLOATING SETTINGS DRAWER / POPOVER) — chỉ mở được ở giao
