@@ -774,9 +774,17 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 pt-1">
                         <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                          tempConfig.enableFreeCaptureMode ? 'bg-purple-100 text-purple-800' : 'bg-neutral-100 text-neutral-700'
+                          tempConfig.captureMode === 'event'
+                            ? 'bg-rose-100 text-rose-800'
+                            : tempConfig.captureMode === 'free'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-neutral-100 text-neutral-700'
                         }`}>
-                          {tempConfig.enableFreeCaptureMode ? 'Chụp Tự Do' : 'Quy Trình Chuẩn'}
+                          {tempConfig.captureMode === 'event'
+                            ? 'Chế Độ Sự Kiện'
+                            : tempConfig.captureMode === 'free'
+                            ? 'Chụp Tự Do'
+                            : 'Photobooth / Mua Giờ'}
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-600 text-xs font-mono">
                           Đếm {tempConfig.countdownSeconds || 3}s
@@ -1294,44 +1302,96 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             {/* TAB 2: THIẾT LẬP CHỤP & QUY TRÌNH (CAPTURE SETTINGS)           */}
             {/* ============================================================== */}
             {activeTab === 'capture_settings' && (
-              <div className="max-w-3xl mx-auto animate-in fade-in duration-200">
-                {/* Card: Chế Độ Chụp Tự Do (Free Capture Mode) — cài đặt duy nhất còn ở tab này,
-                    các mục còn lại (đếm ngược, xem trước khung hình, âm thanh/flash/lưới/video)
+              <div className="max-w-3xl mx-auto animate-in fade-in duration-200 space-y-5">
+                {/* Card: 3 Chế Độ Chụp — chỉ được bật đúng 1, độc lập hoàn toàn với công tắc
+                    "chế độ tiêu đề sự kiện" (ở tab Sự Kiện) vì đó chỉ là hiệu ứng màn hình chờ.
+                    Các mục còn lại (đếm ngược, xem trước khung hình, âm thanh/flash/lưới/video)
                     đã có sẵn và hoạt động thật trong popup "Tùy Chỉnh" trên màn hình chụp. */}
-                <div className={`p-6 rounded-3xl border transition-all shadow-sm ${
-                  tempConfig.enableFreeCaptureMode
-                    ? 'bg-gradient-to-br from-blue-50 via-indigo-50/50 to-white border-blue-300'
-                    : 'bg-white border-[#DDD6C8]'
-                }`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                          tempConfig.enableFreeCaptureMode ? 'bg-blue-600 text-white' : 'bg-neutral-200 text-neutral-700'
-                        }`}>
-                          <Camera className="w-4 h-4" />
-                        </div>
-                        <h4 className="text-sm font-black uppercase tracking-wider text-neutral-900">
-                          Chế Độ Chụp Tự Do
-                        </h4>
+                <div className="p-6 rounded-3xl border border-[#DDD6C8] bg-white shadow-sm space-y-4">
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-wider text-neutral-900">
+                      Chế Độ Vận Hành Máy
+                    </h4>
+                    <p className="text-[11px] text-neutral-500 mt-0.5">
+                      Chọn đúng 1 trong 3 chế độ — quyết định vị trí góc phải trên màn hình chụp (In Nhanh / Đồng hồ / Trống) và luồng sau khi chụp xong.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {(
+                      [
+                        {
+                          key: 'event' as const,
+                          label: 'Chế Độ Sự Kiện',
+                          desc: 'Khách đông, mỗi nhóm chụp 1 lượt. Có nút "In Nhanh" lấy thẳng ảnh vào hậu kỳ, bỏ qua Thư Viện.',
+                          color: 'rose',
+                        },
+                        {
+                          key: 'photobooth' as const,
+                          label: 'Photobooth / Mua Giờ',
+                          desc: 'Khách thuê máy theo phiên có giới hạn thời gian, hiện đồng hồ đếm ngược góc trên.',
+                          color: 'blue',
+                        },
+                        {
+                          key: 'free' as const,
+                          label: 'Chụp Tự Do',
+                          desc: 'Dành cho test hoặc khách thuê máy thời lượng lớn, không giới hạn thời gian.',
+                          color: 'purple',
+                        },
+                      ]
+                    ).map((mode) => {
+                      const isSelected = (tempConfig.captureMode || 'photobooth') === mode.key;
+                      return (
+                        <button
+                          key={mode.key}
+                          type="button"
+                          onClick={() => setTempConfig({ ...tempConfig, captureMode: mode.key })}
+                          className={`text-left p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col gap-1.5 ${
+                            isSelected
+                              ? mode.color === 'rose'
+                                ? 'border-rose-500 bg-rose-50 shadow-sm'
+                                : mode.color === 'purple'
+                                ? 'border-purple-500 bg-purple-50 shadow-sm'
+                                : 'border-blue-500 bg-blue-50 shadow-sm'
+                              : 'border-[#DDD6C8] bg-white hover:border-neutral-400'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                              {mode.label}
+                            </span>
+                            {isSelected && <Check className="w-4 h-4 text-neutral-900" />}
+                          </div>
+                          <p className="text-[10.5px] text-neutral-500 leading-snug">{mode.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Thời lượng phiên — chỉ hiện khi đang chọn Photobooth / Mua Giờ */}
+                  {(tempConfig.captureMode || 'photobooth') === 'photobooth' && (
+                    <div className="pt-3 border-t border-neutral-100">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-neutral-800 mb-2">
+                        Thời Lượng Mỗi Phiên
+                      </h5>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[180, 300, 600, 900].map((secs) => (
+                          <button
+                            key={secs}
+                            type="button"
+                            onClick={() => setTempConfig({ ...tempConfig, photoboothSessionDurationSeconds: secs })}
+                            className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              (tempConfig.photoboothSessionDurationSeconds || 300) === secs
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                : 'bg-white text-neutral-700 border-[#DDD6C8] hover:bg-neutral-50'
+                            }`}
+                          >
+                            {Math.round(secs / 60)} phút
+                          </button>
+                        ))}
                       </div>
                     </div>
-
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                      <input
-                        type="checkbox"
-                        checked={tempConfig.enableFreeCaptureMode ?? false}
-                        onChange={(e) =>
-                          setTempConfig({
-                            ...tempConfig,
-                            enableFreeCaptureMode: e.target.checked,
-                          })
-                        }
-                        className="sr-only peer"
-                      />
-                      <div className="w-12 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
-                    </label>
-                  </div>
+                  )}
                 </div>
               </div>
             )}

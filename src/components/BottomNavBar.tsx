@@ -8,13 +8,6 @@ interface BottomNavBarProps {
   onTriggerShutter?: () => void;
   isTakingPhoto?: boolean;
   shutterLabel?: string;
-  isBackgroundDrawerOpen?: boolean;
-  onToggleBackgroundDrawer?: () => void;
-  // Giữ alias tương thích nếu cần
-  isLayoutDrawerOpen?: boolean;
-  onToggleLayoutDrawer?: () => void;
-  isFilterDrawerOpen?: boolean;
-  onToggleFilterDrawer?: () => void;
 }
 
 interface NavItemProps {
@@ -78,7 +71,7 @@ function NavItem({
       }`}
       aria-label={label}
     >
-      {/* 
+      {/*
         HIỆU ỨNG THIẾT KẾ:
         - Không có thanh nền bao quanh (trong suốt hoàn toàn để nhìn trọn camera).
         - Nút thường: Ban đầu KHÔNG viền, nền tròn tối giản gọn gàng.
@@ -140,14 +133,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onTriggerShutter,
   isTakingPhoto = false,
   shutterLabel,
-  isBackgroundDrawerOpen = false,
-  onToggleBackgroundDrawer,
-  isLayoutDrawerOpen = false,
-  onToggleLayoutDrawer,
 }) => {
   const mouseX = useMotionValue(Infinity);
-  const isBgOpen = isBackgroundDrawerOpen || isLayoutDrawerOpen;
-  const toggleBg = onToggleBackgroundDrawer || onToggleLayoutDrawer;
 
   return (
     <nav
@@ -155,37 +142,17 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       onMouseLeave={() => mouseX.set(Infinity)}
       className="fixed bottom-0 left-0 right-0 w-full z-50 select-none pb-3 sm:pb-4 pointer-events-none flex justify-center items-end"
     >
-      {/* 
-        3 NÚT NỔI ĐỘC LẬP: PHÔNG NỀN | CHỤP ẢNH | CHIA SẺ
-        Không có thanh nền bao quanh để người dùng nhìn trọn camera tối đa.
+      {/*
+        DOCK RÚT GỌN CHỈ CÒN 1 NÚT: CHỤP ẢNH — Phông Nền & Chia Sẻ đã được gỡ khỏi dock:
+        Chia Sẻ chuyển lên góc trên (In Nhanh / đồng hồ phiên tùy chế độ, xem TopAppBar),
+        Phông Nền không còn cần thiết sau khi bỏ thanh cuộn phông nền/khung ảnh trên khung camera.
       */}
-      <div className="w-full max-w-md flex justify-around items-end px-4 sm:px-8 pointer-events-none gap-4">
-        
-        {/* 1. PHÔNG NỀN (Bấm vào bật/tắt dải cuộn ngang màu nền & khung ảnh ngay trên nút chụp) */}
-        <NavItem
-          id="nav-background-btn"
-          label="PHÔNG NỀN"
-          icon="palette"
-          isActive={currentScreen === 'camera' && isBgOpen}
-          onClick={() => {
-            if (currentScreen !== 'camera') {
-              onNavigate('camera');
-              if (toggleBg && !isBgOpen) {
-                toggleBg();
-              }
-            } else if (toggleBg) {
-              toggleBg();
-            }
-          }}
-          mouseX={mouseX}
-        />
-
-        {/* 2. NÚT CHỤP ẢNH (Ở giữa, to sẵn, viền đôi) */}
+      <div className="w-full max-w-md flex justify-center items-end px-4 sm:px-8 pointer-events-none">
         <NavItem
           id="nav-shutter-btn"
           label={shutterLabel || 'CHỤP ẢNH'}
           icon="photo_camera"
-          isActive={currentScreen === 'camera' && !isBgOpen}
+          isActive={currentScreen === 'camera'}
           onClick={() => {
             if (currentScreen !== 'camera') {
               onNavigate('camera');
@@ -196,16 +163,6 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           mouseX={mouseX}
           isHeroShutter={true}
           isTakingPhoto={isTakingPhoto}
-        />
-
-        {/* 3. CHIA SẺ */}
-        <NavItem
-          id="nav-share-btn"
-          label="CHIA SẺ"
-          icon="send"
-          isActive={currentScreen === 'share'}
-          onClick={() => onNavigate('share')}
-          mouseX={mouseX}
         />
       </div>
     </nav>

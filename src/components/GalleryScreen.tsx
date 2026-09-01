@@ -1,119 +1,123 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { AppScreen, CapturedPhoto } from '../types';
+import React, { useMemo, useState, useCallback } from 'react';
+import { AppScreen, CapturedPhoto, StripLayout } from '../types';
+import { LAYOUT_OPTIONS } from '../constants/filters';
 
 interface GalleryScreenProps {
   onNavigate: (screen: AppScreen) => void;
   capturedPhotos: CapturedPhoto[];
   onDeletePhoto: (id: string) => void;
-  onSelectPhotoForFilter: (photo: CapturedPhoto) => void;
-  // Gán 1 lượt chụp (nhóm ảnh) làm nguồn cho màn Chia Sẻ, rồi chuyển sang đó để ghép dải ảnh.
-  onUseSessionForShare?: (photos: CapturedPhoto[]) => void;
-}
-
-// Khoảng cách thời gian tối đa (phút) giữa 2 tấm ảnh để vẫn tính là cùng 1 lượt chụp.
-const SESSION_GAP_MS = 3 * 60 * 1000;
-
-// Gom danh sách ảnh (đã sắp xếp mới nhất trước) thành từng nhóm theo lượt chụp,
-// dựa trên khoảng cách thời gian giữa các tấm — giúp phân biệt rõ "đây là ảnh của
-// nhóm khách nào" thay vì dồn chung tất cả vào 1 lưới phẳng.
-function groupPhotosIntoSessions(photos: CapturedPhoto[]): CapturedPhoto[][] {
-  const groups: CapturedPhoto[][] = [];
-  let current: CapturedPhoto[] = [];
-
-  for (const photo of photos) {
-    if (current.length === 0) {
-      current.push(photo);
-      continue;
-    }
-    const prev = current[current.length - 1];
-    if (prev.timestamp - photo.timestamp <= SESSION_GAP_MS) {
-      current.push(photo);
-    } else {
-      groups.push(current);
-      current = [photo];
-    }
-  }
-  if (current.length > 0) groups.push(current);
-  return groups;
-}
-
-function formatSessionLabel(newestTimestamp: number, isFirstGroup: boolean): string {
-  const diffMs = Date.now() - newestTimestamp;
-  if (isFirstGroup && diffMs < 2 * 60 * 1000) return 'Lượt Chụp Vừa Xong';
-
-  const d = new Date(newestTimestamp);
-  const isToday = new Date().toDateString() === d.toDateString();
-  const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-
-  if (isToday) return `Hôm Nay • ${timeStr}`;
-  const dateStr = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-  return `${dateStr} • ${timeStr}`;
+  // Bố cục khách đã chọn ban đầu — quyết định số ô cần gán ở cột hậu kỳ bên phải.
+  selectedLayout: StripLayout;
+  // Xác nhận danh sách ảnh đã gán đủ ô, dùng làm nguồn cho màn Chia Sẻ, rồi chuyển sang đó.
+  onConfirmSelection: (photos: CapturedPhoto[]) => void;
 }
 
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onNavigate,
   capturedPhotos,
   onDeletePhoto,
-  onSelectPhotoForFilter,
-  onUseSessionForShare,
+  selectedLayout,
+  onConfirmSelection,
 }) => {
-  const sessions = useMemo(() => groupPhotosIntoSessions(capturedPhotos), [capturedPhotos]);
+  const requiredCount = useMemo(() => {
+    const cfg = LAYOUT_OPTIONS.find((l) => l.id === selectedLayout);
+    return cfg ? cfg.photoCount : 3;
+  }, [selectedLayout]);
 
-  // Ảnh đang mở xem phóng to (lightbox), lưu theo id để danh sách phẳng luôn khớp
-  // dù ảnh có bị xoá/thay đổi thứ tự giữa chừng.
-  const [lightboxId, setLightboxId] = useState<string | null>(null);
-  const lightboxIndex = lightboxId ? capturedPhotos.findIndex((p) => p.id === lightboxId) : -1;
-  const lightboxPhoto = lightboxIndex >= 0 ? capturedPhotos[lightboxIndex] : null;
+  // Cột phải: mảng cố định requiredCount ô, mỗi ô chứa id ảnh hoặc null (còn trống).
+  const [staged, setStaged] = useState<(string | null)[]>(() => Array.from({ length: requiredCount }, () => null));
 
-  const goToRelative = useCallback(
-    (delta: number) => {
-      if (lightboxIndex < 0 || capturedPhotos.length === 0) return;
-      const nextIndex = (lightboxIndex + delta + capturedPhotos.length) % capturedPhotos.length;
-      setLightboxId(capturedPhotos[nextIndex].id);
+  // Nếu layout đổi (số ô cần thay đổi) trong lúc đang ở Thư Viện: giữ lại các ảnh đã gán còn hợp lệ,
+  // cắt bớt hoặc thêm ô trống cho khớp số lượng mới.
+  React.useEffect(() => {
+    setStaged((prev) => {
+      if (prev.length === requiredCount) return prev;
+      const next = prev.slice(0, requiredCount);
+      while (next.length < requiredCount) next.push(null);
+      return next;
+    });
+  }, [requiredCount]);
+
+  const stagedIdSet = useMemo(() => new Set(staged.filter((id): id is string => !!id)), [staged]);
+  const filledCount = staged.filter((id) => !!id).length;
+  const isComplete = filledCount === requiredCount && requiredCount > 0;
+
+  // Gán 1 ảnh vào ô trống đầu tiên còn lại (dùng cho bấm chọn ở cột trái, hoặc thả kéo vào cột phải nói chung)
+  const assignToNextEmptySlot = useCallback(
+    (photoId: string) => {
+      setStaged((prev) => {
+        if (prev.includes(photoId)) return prev; // đã có trong danh sách chờ rồi
+        const emptyIdx = prev.findIndex((id) => id === null);
+        if (emptyIdx === -1) return prev; // hết chỗ trống
+        const next = [...prev];
+        next[emptyIdx] = photoId;
+        return next;
+      });
     },
-    [lightboxIndex, capturedPhotos]
+    []
   );
 
-  // Đóng lightbox tự động nếu ảnh đang xem bị xoá khỏi danh sách
-  useEffect(() => {
-    if (lightboxId && lightboxIndex < 0) {
-      setLightboxId(null);
+  // Gán 1 ảnh vào đúng ô chỉ định (dùng khi thả kéo trực tiếp vào 1 ô cụ thể)
+  const assignToSlot = useCallback((slotIdx: number, photoId: string) => {
+    setStaged((prev) => {
+      const withoutDup = prev.map((id) => (id === photoId ? null : id));
+      const next = [...withoutDup];
+      next[slotIdx] = photoId;
+      return next;
+    });
+  }, []);
+
+  // Bỏ 1 ảnh ra khỏi ô (kéo ra / bấm lại)
+  const removeFromSlot = useCallback((slotIdx: number) => {
+    setStaged((prev) => {
+      const next = [...prev];
+      next[slotIdx] = null;
+      return next;
+    });
+  }, []);
+
+  const handleLeftPhotoTap = (photoId: string) => {
+    if (stagedIdSet.has(photoId)) {
+      // Bấm lại ảnh đã chọn ở cột trái = bỏ nó ra khỏi ô đang gán
+      setStaged((prev) => prev.map((id) => (id === photoId ? null : id)));
+    } else {
+      assignToNextEmptySlot(photoId);
     }
-  }, [lightboxId, lightboxIndex]);
-
-  // Điều hướng bằng phím mũi tên / Esc khi lightbox đang mở
-  useEffect(() => {
-    if (!lightboxPhoto) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') goToRelative(-1);
-      else if (e.key === 'ArrowRight') goToRelative(1);
-      else if (e.key === 'Escape') setLightboxId(null);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [lightboxPhoto, goToRelative]);
-
-  const handleDeleteFromLightbox = (id: string) => {
-    onDeletePhoto(id);
   };
 
-  const handleUseForColorEdit = (photo: CapturedPhoto) => {
-    onSelectPhotoForFilter(photo);
-    onNavigate('filters');
+  const handleConfirm = () => {
+    const photos = staged
+      .map((id) => capturedPhotos.find((p) => p.id === id))
+      .filter((p): p is CapturedPhoto => !!p);
+    if (photos.length === 0) return;
+    onConfirmSelection(photos);
+    onNavigate('share');
+  };
+
+  // Kéo-thả HTML5 (bổ trợ cho chuột trên desktop — thao tác chính vẫn là bấm chọn, dùng tốt trên cảm ứng)
+  const handleDragStartLeft = (e: React.DragEvent, photoId: string) => {
+    e.dataTransfer.setData('text/photo-id', photoId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDropOnSlot = (e: React.DragEvent, slotIdx: number) => {
+    e.preventDefault();
+    const photoId = e.dataTransfer.getData('text/photo-id');
+    if (photoId) assignToSlot(slotIdx, photoId);
+  };
+  const handleDragStartSlot = (e: React.DragEvent, slotIdx: number) => {
+    e.dataTransfer.setData('text/slot-idx', String(slotIdx));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDropOnLeft = (e: React.DragEvent) => {
+    e.preventDefault();
+    const slotIdxRaw = e.dataTransfer.getData('text/slot-idx');
+    if (slotIdxRaw !== '') removeFromSlot(Number(slotIdxRaw));
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto pt-2 md:pt-6 px-4 md:px-8 flex flex-col gap-6 select-none pb-28 md:pb-12 text-[#1A1A1A]">
-      {/* Tiêu Đề (rút gọn chỉ còn dòng thống kê — đã có nút quay lại chụp ảnh ở thanh trên) */}
-      <div className="border-b border-[#1A1A1A]/10 pb-3">
-        <p className="text-[11px] font-sans text-[#1A1A1A]/60 uppercase tracking-widest">
-          {capturedPhotos.length} Tấm Ảnh • {sessions.length} Lượt Chụp
-        </p>
-      </div>
-
-      {/* Trạng Thái Trống */}
-      {capturedPhotos.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-3 py-20 text-center text-[#1A1A1A]/50">
+    <div className="w-full h-full flex flex-col select-none text-[#1A1A1A]">
+      {capturedPhotos.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20 text-center text-[#1A1A1A]/50">
           <span className="material-symbols-outlined text-[48px]">photo_library</span>
           <p className="text-sm font-sans">Chưa có tấm ảnh nào được chụp.</p>
           <button
@@ -123,152 +127,120 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             Chụp Ảnh Ngay
           </button>
         </div>
-      )}
-
-      {/* Danh Sách Ảnh Theo Từng Lượt Chụp */}
-      <div className="flex flex-col gap-8">
-        {sessions.map((group, groupIdx) => (
-          <div key={group[0].id} className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#8C7A5B]" />
-                <h3 className="text-[11px] font-sans font-bold text-[#1A1A1A] uppercase tracking-[0.2em]">
-                  {formatSessionLabel(group[0].timestamp, groupIdx === 0)}
-                </h3>
-                <span className="text-[10px] font-sans text-[#1A1A1A]/40 uppercase tracking-wider">
-                  {group.length} tấm
-                </span>
-              </div>
-
-              {onUseSessionForShare && (
-                <button
-                  onClick={() => {
-                    onUseSessionForShare(group);
-                    onNavigate('share');
-                  }}
-                  className="px-3.5 py-1.5 bg-transparent border border-[#1A1A1A]/20 text-[#1A1A1A] font-sans text-[10.5px] uppercase tracking-wider hover:bg-[#1A1A1A]/5 transition-all flex items-center gap-1.5 flex-shrink-0"
-                >
-                  <span className="material-symbols-outlined text-[14px]">send</span>
-                  <span>Ghép Dải Ảnh Từ Lượt Này</span>
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {group.map((photo) => (
-                <div
-                  key={photo.id}
-                  onClick={() => setLightboxId(photo.id)}
-                  className="aspect-square bg-[#1A1A1A] overflow-hidden border border-[#1A1A1A]/15 relative cursor-pointer active:scale-[0.97] transition-transform"
-                >
-                  <img src={photo.dataUrl} alt="Ảnh đã chụp" className="w-full h-full object-cover" />
-
-                  {/* Nút xoá luôn hiển thị (không dựa vào hover) để dùng tốt trên màn cảm ứng */}
-                  {capturedPhotos.length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeletePhoto(photo.id);
-                      }}
-                      className="absolute top-1.5 right-1.5 w-7 h-7 bg-black/55 hover:bg-red-700 active:bg-red-700 text-white flex items-center justify-center rounded-full shadow-sm transition-colors"
-                      title="Xóa tấm ảnh này"
-                    >
-                      <span className="material-symbols-outlined text-[15px]">close</span>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* LIGHTBOX: Xem Ảnh Phóng To Toàn Màn Hình */}
-      {lightboxPhoto && (
-        <div
-          className="fixed inset-0 z-50 bg-black/92 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setLightboxId(null)}
-        >
-          {/* Nút Đóng */}
-          <button
-            onClick={() => setLightboxId(null)}
-            className="absolute top-4 right-4 sm:top-6 sm:right-6 w-11 h-11 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors z-10"
-            title="Đóng"
-          >
-            <span className="material-symbols-outlined text-[22px]">close</span>
-          </button>
-
-          {/* Đếm Số Thứ Tự */}
-          <div className="absolute top-4 left-4 sm:top-6 sm:left-6 px-3 py-1.5 bg-white/10 text-white rounded-full text-[11px] font-sans font-bold tracking-wider z-10">
-            {lightboxIndex + 1} / {capturedPhotos.length}
-          </div>
-
-          {/* Nút Trước */}
-          {capturedPhotos.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goToRelative(-1);
-              }}
-              className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors z-10"
-              title="Ảnh trước"
-            >
-              <span className="material-symbols-outlined text-[26px]">chevron_left</span>
-            </button>
-          )}
-
-          {/* Ảnh Phóng To */}
-          <img
-            src={lightboxPhoto.dataUrl}
-            alt="Xem ảnh phóng to"
-            onClick={(e) => e.stopPropagation()}
-            className="max-w-full max-h-[70vh] sm:max-h-[75vh] object-contain shadow-2xl"
-          />
-
-          {/* Nút Sau */}
-          {capturedPhotos.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                goToRelative(1);
-              }}
-              className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-colors z-10"
-              title="Ảnh sau"
-            >
-              <span className="material-symbols-outlined text-[26px]">chevron_right</span>
-            </button>
-          )}
-
-          {/* Thanh Thao Tác Dưới Cùng */}
+      ) : (
+        <div className="flex-1 w-full max-w-6xl mx-auto px-3 md:px-6 flex flex-col md:flex-row gap-4 md:gap-5 min-h-0">
+          {/* CỘT TRÁI (LỚN HƠN): TOÀN BỘ ẢNH ĐÃ CHỤP, KHÔNG TÁCH LƯỢT */}
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="mt-5 flex items-center gap-2.5 flex-wrap justify-center"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDropOnLeft}
+            className="flex-[2.2] min-h-0 flex flex-col gap-2.5"
           >
+            <div className="flex items-center justify-between px-0.5">
+              <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                Tất Cả Ảnh ({capturedPhotos.length})
+              </h3>
+              <span className="text-[10px] font-sans text-[#1A1A1A]/50">Bấm ảnh để đưa vào ô hậu kỳ →</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                {capturedPhotos.map((photo) => {
+                  const isStaged = stagedIdSet.has(photo.id);
+                  return (
+                    <div
+                      key={photo.id}
+                      draggable
+                      onDragStart={(e) => handleDragStartLeft(e, photo.id)}
+                      onClick={() => handleLeftPhotoTap(photo.id)}
+                      className={`aspect-square bg-[#1A1A1A] overflow-hidden relative cursor-pointer active:scale-[0.97] transition-transform border-2 ${
+                        isStaged ? 'border-amber-500 ring-2 ring-amber-400/60' : 'border-[#1A1A1A]/10'
+                      }`}
+                    >
+                      <img
+                        src={photo.dataUrl}
+                        alt="Ảnh đã chụp"
+                        className={`w-full h-full object-cover transition-opacity ${isStaged ? 'opacity-50' : ''}`}
+                      />
+
+                      {isStaged && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                          <span className="material-symbols-outlined text-white text-[26px] drop-shadow-md">
+                            check_circle
+                          </span>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeletePhoto(photo.id);
+                        }}
+                        className="absolute top-1 right-1 w-6 h-6 bg-black/55 hover:bg-red-700 active:bg-red-700 text-white flex items-center justify-center rounded-full shadow-sm transition-colors"
+                        title="Xóa tấm ảnh này"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">close</span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* CỘT PHẢI (NHỎ HƠN): SỐ Ô CHỜ HẬU KỲ THEO ĐÚNG BỐ CỤC ĐÃ CHỌN */}
+          <div className="flex-1 min-h-0 flex flex-col gap-2.5 md:max-w-[280px]">
+            <div className="flex items-center justify-between px-0.5">
+              <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                Chờ Hậu Kỳ ({filledCount}/{requiredCount})
+              </h3>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
+              <div className="grid grid-cols-3 md:grid-cols-2 gap-2">
+                {staged.map((photoId, slotIdx) => {
+                  const photo = photoId ? capturedPhotos.find((p) => p.id === photoId) : null;
+                  return (
+                    <div
+                      key={slotIdx}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDropOnSlot(e, slotIdx)}
+                      draggable={!!photo}
+                      onDragStart={(e) => photo && handleDragStartSlot(e, slotIdx)}
+                      onClick={() => photo && removeFromSlot(slotIdx)}
+                      className={`aspect-square relative overflow-hidden transition-all ${
+                        photo
+                          ? 'bg-[#1A1A1A] cursor-pointer active:scale-[0.97]'
+                          : 'bg-[#EFEEE8] border-2 border-dashed border-[#1A1A1A]/20 flex items-center justify-center'
+                      }`}
+                      title={photo ? 'Bấm để bỏ ảnh này ra' : `Ô #${slotIdx + 1} còn trống`}
+                    >
+                      {photo ? (
+                        <>
+                          <img src={photo.dataUrl} alt={`Ô #${slotIdx + 1}`} className="w-full h-full object-cover" />
+                          <div className="absolute top-1 right-1 w-6 h-6 bg-black/55 text-white flex items-center justify-center rounded-full shadow-sm">
+                            <span className="material-symbols-outlined text-[13px]">close</span>
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-[11px] font-mono font-bold text-[#1A1A1A]/35">#{slotIdx + 1}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* NÚT GỬI SANG HẬU KỲ / CHIA SẺ (HÌNH MÁY BAY GIẤY) */}
             <button
-              onClick={() => handleUseForColorEdit(lightboxPhoto)}
-              className="px-4 py-2.5 bg-white text-[#1A1A1A] font-sans text-[11px] uppercase tracking-wider hover:bg-[#EFEEE8] transition-all flex items-center gap-2 rounded-full shadow-sm"
+              onClick={handleConfirm}
+              disabled={!isComplete}
+              className={`w-full py-3.5 font-sans text-xs uppercase tracking-[0.2em] font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
+                isComplete
+                  ? 'bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] cursor-pointer active:scale-[0.98]'
+                  : 'bg-[#1A1A1A]/15 text-[#1A1A1A]/40 cursor-not-allowed'
+              }`}
             >
-              <span className="material-symbols-outlined text-[16px]">tune</span>
-              <span>Chỉnh Màu</span>
+              <span className="material-symbols-outlined text-[18px]">send</span>
+              <span>{isComplete ? 'Qua Hậu Kỳ & Chia Sẻ' : `Còn Thiếu ${requiredCount - filledCount} Ảnh`}</span>
             </button>
-            <a
-              href={lightboxPhoto.dataUrl}
-              download={`photobag-${lightboxPhoto.id}.png`}
-              onClick={(e) => e.stopPropagation()}
-              className="px-4 py-2.5 bg-white/10 text-white font-sans text-[11px] uppercase tracking-wider hover:bg-white/20 transition-all flex items-center gap-2 rounded-full"
-            >
-              <span className="material-symbols-outlined text-[16px]">download</span>
-              <span>Tải Ảnh Này</span>
-            </a>
-            {capturedPhotos.length > 1 && (
-              <button
-                onClick={() => handleDeleteFromLightbox(lightboxPhoto.id)}
-                className="px-4 py-2.5 bg-red-950/50 text-red-200 font-sans text-[11px] uppercase tracking-wider hover:bg-red-900/60 transition-all flex items-center gap-2 rounded-full"
-              >
-                <span className="material-symbols-outlined text-[16px]">delete</span>
-                <span>Xóa Ảnh Này</span>
-              </button>
-            )}
           </div>
         </div>
       )}

@@ -56,7 +56,8 @@ export const DEFAULT_EVENT_CONFIG: EventConfig = {
   titleAlternateIntervalSeconds: 60, // 60s luân phiên 1 lần
   titleSize: 'md', // Mặc định kích thước vừa (md)
   showLogoBorder: true, // Mặc định bật khung viền
-  enableFreeCaptureMode: false, // Mặc định tắt (chụp theo bố cục), khi bật thì chụp tự do
+  captureMode: 'photobooth', // Mặc định: Photobooth / Mua Giờ
+  photoboothSessionDurationSeconds: 300, // Mặc định 5 phút / phiên
   security: {
     adminPin: '1234',
     enableKioskLock: true,
@@ -606,12 +607,12 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
             className="text-xs sm:text-sm md:text-base font-extrabold tracking-wider sm:tracking-widest uppercase select-none whitespace-nowrap drop-shadow-xs transition-colors"
             style={{ color: currentTheme.textColor }}
           >
-            {eventConfig.customInstructions || (eventConfig.enableFreeCaptureMode ? 'CHẠM BẤT KỲ ĐÂU ĐỂ CHỤP ẢNH TỰ DO' : 'CHẠM BẤT KỲ ĐÂU ĐỂ BẮT ĐẦU CHỤP ẢNH')}
+            {eventConfig.customInstructions || (eventConfig.captureMode === 'free' ? 'CHẠM BẤT KỲ ĐÂU ĐỂ CHỤP ẢNH TỰ DO' : 'CHẠM BẤT KỲ ĐÂU ĐỂ BẮT ĐẦU CHỤP ẢNH')}
           </span>
         </div>
 
         {/* Huy hiệu thông báo Chế Độ Chụp Tự Do đang bật */}
-        {eventConfig.enableFreeCaptureMode && (
+        {eventConfig.captureMode === 'free' && (
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-400/40 text-blue-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
             <span>Chế Độ Chụp Tự Do Đang Bật</span>
@@ -1102,11 +1103,11 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
                   <input
                     type="checkbox"
-                    checked={tempConfig.enableFreeCaptureMode ?? false}
+                    checked={tempConfig.captureMode === 'free'}
                     onChange={(e) =>
                       setTempConfig({
                         ...tempConfig,
-                        enableFreeCaptureMode: e.target.checked,
+                        captureMode: e.target.checked ? 'free' : 'photobooth',
                       })
                     }
                     className="sr-only peer"

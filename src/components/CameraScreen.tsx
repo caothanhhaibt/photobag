@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, StripLayout, FrameColor, FrameStyle } from '../types';
-import { SAMPLE_STUDIO_VIEWFINDER, SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, FILTER_PRESETS, LAYOUT_OPTIONS, FRAME_COLORS } from '../constants/filters';
+import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, StripLayout, FrameColor, FrameStyle, CaptureMode } from '../types';
+import { SAMPLE_STUDIO_VIEWFINDER, SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, FILTER_PRESETS, LAYOUT_OPTIONS } from '../constants/filters';
 import { playShutterSound, playBeepSound, playSuccessChime } from '../utils/audio';
-import { HorizontalBackgroundCarousel, BACKGROUND_PRESETS } from './HorizontalBackgroundCarousel';
-import { VerticalSlider } from './VerticalSlider';
-import { Check, X, RotateCcw, Camera, Play, Radio, SlidersHorizontal, LayoutGrid, Columns, Palette } from 'lucide-react';
+import { X, RotateCcw, Camera } from 'lucide-react';
 
 interface CameraScreenProps {
   onNavigate: (screen: AppScreen) => void;
@@ -43,13 +41,12 @@ interface CameraScreenProps {
   currentFilterIntensity: number;
   onSelectFilter: (filterId: string, defaultIntensity?: number) => void;
   onChangeIntensity: (intensity: number) => void;
-  showBackgroundDrawer?: boolean;
-  onToggleBackgroundDrawer?: () => void;
-  showLayoutDrawer?: boolean;
-  onToggleLayoutDrawer?: () => void;
-  showFilterDrawer?: boolean;
-  onToggleFilterDrawer?: () => void;
+  brightness?: number;
+  onChangeBrightness?: (brightness: number) => void;
   isFreeCapture?: boolean;
+  captureMode?: CaptureMode;
+  onRegisterQuickPrintTrigger?: (triggerFn: () => void) => void;
+  onUpdateBurstPhotoCount?: (count: number) => void;
 }
 
 export const CameraScreen: React.FC<CameraScreenProps> = ({
@@ -89,11 +86,12 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   currentFilterIntensity,
   onSelectFilter,
   onChangeIntensity,
-  showBackgroundDrawer = false,
-  onToggleBackgroundDrawer,
-  showLayoutDrawer = false,
-  onToggleLayoutDrawer,
+  brightness: propBrightness,
+  onChangeBrightness,
   isFreeCapture = false,
+  captureMode = 'photobooth',
+  onRegisterQuickPrintTrigger,
+  onUpdateBurstPhotoCount,
 }) => {
   const [internalFlash, setInternalFlash] = useState(true);
   const flashEnabled = propFlashEnabled !== undefined ? propFlashEnabled : internalFlash;
@@ -123,7 +121,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const captureTriggerMode = propCaptureTriggerMode !== undefined ? propCaptureTriggerMode : internalCaptureTriggerMode;
   const setCaptureTriggerMode = onSetCaptureTriggerMode ? onSetCaptureTriggerMode : setInternalCaptureTriggerMode;
 
-  const [brightness, setBrightness] = useState<number>(100); // 50% -> 150%, mặc định 100%
+  // Độ sáng camera: mặc định 100%, có thể truyền từ App (điều khiển qua bảng "Tùy Chỉnh" ở logo) —
+  // giữ 1 state nội bộ dự phòng nếu chưa nối prop từ bên ngoài.
+  const [internalBrightness, setInternalBrightness] = useState<number>(100);
+  const brightness = propBrightness !== undefined ? propBrightness : internalBrightness;
 
   // Trạng thái buổi chụp
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -371,7 +372,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     else setTimerSeconds(0);
   };
 
-  // Hàm hoàn tất chế độ chụp tự do và chuyển sang chọn bố cục & chia sẻ
+  // Hàm hoàn tất chế độ chụp tự do và chuyển sang Thư Viện để khách tự chọn ảnh đưa vào hậu kỳ
+  // (Chụp Tự Do không thể là chế độ Sự Kiện nên luôn qua Thư Viện, không có đường tắt In Nhanh).
   const handleFinishFreeCapture = useCallback(async () => {
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current);
@@ -381,9 +383,31 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     setIsBurstActive(false);
 
     if (burstPhotos.length === 0) {
-      onNavigate('share');
+      onNavigate('gallery');
       return;
     }
+
+    if (soundEnabled) {
+      playSuccessChime();
+    }
+
+    const videoUrl = await stopBtsRecording();
+    onSessionComplete(burstPhotos, videoUrl);
+    onNavigate('gallery');
+  }, [burstPhotos, soundEnabled, stopBtsRecording, onSessionComplete, onNavigate]);
+
+  // Hàm "In Nhanh" (chỉ dùng ở Chế Độ Sự Kiện, kích hoạt từ nút góc trên qua logo TopAppBar):
+  // Lấy đúng các ảnh đang có ở khung xem trước hiện tại, hoàn tất buổi chụp và vào thẳng hậu kỳ
+  // Chia Sẻ, bỏ qua bước chọn ảnh ở Thư Viện — phù hợp khi khách đông, mỗi nhóm chỉ chụp 1 lượt.
+  const handleQuickPrint = useCallback(async () => {
+    if (burstPhotos.length === 0) return;
+
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdown(null);
+    setIsBurstActive(false);
 
     if (soundEnabled) {
       playSuccessChime();
@@ -545,12 +569,19 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       // Dừng ghi video và nhận URL video hậu trường
       const videoUrl = await stopBtsRecording();
 
-      setTimeout(() => {
+      if (captureMode === 'event') {
+        // Chế Độ Sự Kiện: dừng lại ở màn hình chụp cho khách xem lại khung xem trước, chờ bấm
+        // "In Nhanh" ở góc trên (qua logo) để xác nhận & qua thẳng Chia Sẻ.
         onSessionComplete(updated, videoUrl);
-        onNavigate('share');
-      }, 750);
+      } else {
+        // Chế Độ Photobooth / Chụp Tự Do: qua Thư Viện để khách tự chọn ảnh đưa vào hậu kỳ.
+        setTimeout(() => {
+          onSessionComplete(updated, videoUrl);
+          onNavigate('gallery');
+        }, 750);
+      }
     }
-  }, [flashEnabled, soundEnabled, captureFrame, currentFilterId, currentFilterIntensity, onPhotoCaptured, onSessionComplete, onNavigate, captureTriggerMode, stopBtsRecording]);
+  }, [flashEnabled, soundEnabled, captureFrame, currentFilterId, currentFilterIntensity, onPhotoCaptured, onSessionComplete, onNavigate, captureTriggerMode, stopBtsRecording, captureMode]);
 
   // Chạy chuỗi đếm ngược (Nổi sắc nét trên camera, KHÔNG CÓ LỚP PHỦ MỜ KHUNG ẢNH)
   const runCountdown = useCallback((burstIdx: number, totalBurst: number, collected: CapturedPhoto[]) => {
@@ -653,6 +684,27 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       });
     }
   }, [onRegisterShutterTrigger]);
+
+  const quickPrintTriggerRef = useRef(handleQuickPrint);
+  quickPrintTriggerRef.current = handleQuickPrint;
+
+  // Đăng ký trigger "In Nhanh" từ bên ngoài (nút góc trên phải trong TopAppBar, chỉ hiện ở Chế Độ Sự Kiện)
+  useEffect(() => {
+    if (onRegisterQuickPrintTrigger) {
+      onRegisterQuickPrintTrigger(() => {
+        if (quickPrintTriggerRef.current) {
+          quickPrintTriggerRef.current();
+        }
+      });
+    }
+  }, [onRegisterQuickPrintTrigger]);
+
+  // Báo số ảnh đang có ở khung xem trước hiện tại ra ngoài (để TopAppBar biết bật/tắt nút In Nhanh)
+  useEffect(() => {
+    if (onUpdateBurstPhotoCount) {
+      onUpdateBurstPhotoCount(burstPhotos.length);
+    }
+  }, [burstPhotos.length, onUpdateBurstPhotoCount]);
 
   // Lắng nghe Phím Bấm (Space, Enter, Volume / Remote Bluetooth Shutter)
   useEffect(() => {
@@ -796,40 +848,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         )}
 
 
-
-        {/* 2 THANH TRƯỢT DỌC ĐIỀU CHỈNH ĐỘ ĐẬM & ĐỘ SÁNG NẰM BÊN CẠNH TRÁI (BẬT/TẮT ĐỒNG BỘ CÙNG BỘ LỌC) */}
-        {(showBackgroundDrawer || showLayoutDrawer) && (
-          <div className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-25 flex flex-col gap-3 pointer-events-none animate-in fade-in slide-in-from-left-4 duration-300">
-            {/* Thanh Trượt Dọc 1: ĐỘ ĐẬM (Filter Intensity) */}
-            <VerticalSlider
-              id="filter-intensity-vertical-slider"
-              label="ĐẬM"
-              icon="contrast"
-              value={currentFilterIntensity}
-              min={0}
-              max={100}
-              step={1}
-              unit="%"
-              onChange={onChangeIntensity}
-              accentColor="#2563EB"
-            />
-
-            {/* Thanh Trượt Dọc 2: ĐỘ SÁNG (Camera Brightness) */}
-            <VerticalSlider
-              id="camera-brightness-vertical-slider"
-              label="SÁNG"
-              icon="wb_sunny"
-              value={brightness}
-              min={50}
-              max={150}
-              step={1}
-              unit="%"
-              onChange={setBrightness}
-              accentColor="#93C5FD"
-            />
-          </div>
-        )}
-
         {/* SỐ ĐẾM NGƯỢC NỔI TRỰC TIẾP TRÊN MÀN HÌNH (KHÔNG CÓ LỚP PHỦ MỜ KHUNG ẢNH - CHUẨN PHOTOBOOTH) */}
         {countdown !== null && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-40 pointer-events-none select-none">
@@ -848,7 +866,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         )}
 
         {/* CHẾ ĐỘ 1: DẢI Ô NGANG BÊN DƯỚI (FLOATING PHOTO CARDS - KHÔNG BO GÓC, CHUẨN KIOSK THAM KHẢO) - ẨN KHI Ở CHẾ ĐỘ CHỤP TỰ DO */}
-        {!isFreeCapture && previewMode === 'bottom-slots' && !(showBackgroundDrawer || showLayoutDrawer) && (
+        {!isFreeCapture && previewMode === 'bottom-slots' && (
           <div className="absolute left-0 right-0 z-25 flex justify-center pointer-events-none transition-all duration-300 bottom-32 sm:bottom-36 md:bottom-40">
             <div className="pointer-events-auto flex items-center justify-center gap-2.5 sm:gap-3.5 md:gap-4 px-2 max-w-full overflow-x-auto py-1">
               {Array.from({ length: totalSlots }).map((_, index) => {
@@ -967,20 +985,6 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                 </span>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* THANH CUỘN NGANG PHÔNG NỀN NẰM PHÍA TRÊN NÚT CHỤP (KHI MỞ) */}
-        {(showBackgroundDrawer || showLayoutDrawer) && (
-          <div className="absolute bottom-32 sm:bottom-36 md:bottom-40 left-0 right-0 z-30 pointer-events-none">
-            <HorizontalBackgroundCarousel
-              selectedFrameColor={selectedFrameColor}
-              selectedFrameStyle={selectedFrameStyle}
-              onSelectBackground={(color, style) => {
-                if (onSelectFrameColor) onSelectFrameColor(color);
-                if (onSelectFrameStyle) onSelectFrameStyle(style);
-              }}
-            />
           </div>
         )}
 

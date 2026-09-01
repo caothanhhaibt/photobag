@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Image as ImageIcon,
   Sliders,
+  Sun,
   Grid,
   Zap,
   ZapOff,
@@ -24,7 +25,7 @@ import {
   ChevronRight,
   Shield,
 } from 'lucide-react';
-import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode } from '../types';
+import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, CaptureMode } from '../types';
 import { FILTER_PRESETS } from '../constants/filters';
 
 interface TopAppBarProps {
@@ -54,7 +55,16 @@ interface TopAppBarProps {
   currentFilterId?: string;
   currentFilterIntensity?: number;
   onSelectFilter?: (filterId: string, defaultIntensity?: number) => void;
+  onChangeIntensity?: (intensity: number) => void;
+  brightness?: number;
+  onChangeBrightness?: (brightness: number) => void;
   onOpenAdminDashboard?: () => void;
+  // Chế độ chụp hiện tại (Sự Kiện / Photobooth / Tự Do) — quyết định widget hiện ở góc trên phải
+  // khi đang ở giao diện chụp ảnh: nút In Nhanh, đồng hồ đếm ngược phiên, hoặc không có gì.
+  captureMode?: CaptureMode;
+  burstPhotoCount?: number;
+  onTriggerQuickPrint?: () => void;
+  photoboothRemainingSeconds?: number | null;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -82,22 +92,45 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   captureTriggerMode = 'auto',
   onSetCaptureTriggerMode,
   currentFilterId = 'original',
+  currentFilterIntensity = 0,
   onSelectFilter,
+  onChangeIntensity,
+  brightness = 100,
+  onChangeBrightness,
   onOpenAdminDashboard,
+  captureMode = 'photobooth',
+  burstPhotoCount = 0,
+  onTriggerQuickPrint,
+  photoboothRemainingSeconds = null,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
+  // Bảng Tùy Chỉnh giờ chỉ mở được ở giao diện chụp ảnh, kích hoạt bằng cách bấm vào logo (xem khối
+  // TRUNG TÂM bên dưới) thay vì một nút bánh răng riêng. Cần 2 ref để việc "bấm ra ngoài để đóng"
+  // không tính luôn cú bấm vào chính logo (nơi mở bảng) hay vào bảng đang mở ở góc phải.
+  const logoRef = useRef<HTMLDivElement>(null);
+  const rightCornerRef = useRef<HTMLDivElement>(null);
 
-  // Đóng bảng cài đặt khi bấm ra ngoài
+  // Đóng bảng cài đặt khi bấm ra ngoài (ngoài cả logo lẫn bảng/góc phải)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        logoRef.current && !logoRef.current.contains(target) &&
+        rightCornerRef.current && !rightCornerRef.current.contains(target)
+      ) {
         setSettingsOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Bảng Tùy Chỉnh chỉ có ý nghĩa ở giao diện chụp ảnh — nếu điều hướng sang màn khác thì tự đóng.
+  useEffect(() => {
+    if (currentScreen !== 'camera') {
+      setSettingsOpen(false);
+    }
+  }, [currentScreen]);
 
   const handleToggleGallery = () => {
     if (currentScreen === 'gallery') {
@@ -107,9 +140,20 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
     }
   };
 
+  // Bấm logo: ở giao diện chụp ảnh -> mở/đóng bảng Tùy Chỉnh; ở các màn khác -> quay lại chụp ảnh như cũ.
+  const handleLogoClick = () => {
+    if (currentScreen === 'camera') {
+      setSettingsOpen((prev) => !prev);
+    } else {
+      onNavigate('camera');
+    }
+  };
+
   // Lấy 3 ảnh mới nhất để hiển thị chồng lên nhau
   const latestPhotos = capturedPhotos.slice(0, 3);
   const photoCount = capturedPhotos.length;
+
+  const remainingClamped = photoboothRemainingSeconds !== null ? Math.max(0, photoboothRemainingSeconds) : null;
 
   return (
     <header className="fixed top-0 left-0 right-0 w-full z-50 pointer-events-none bg-transparent border-0 flex justify-between items-center px-3 sm:px-6 md:px-8 pt-3 sm:pt-4 select-none">
@@ -196,10 +240,13 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         )}
       </div>
 
-      {/* 2. TRUNG TÂM: ICON CHIẾC CẶP GẮN MÁY ẢNH & TÊN APP PHOTOBAG */}
+      {/* 2. TRUNG TÂM: ICON CHIẾC CẶP GẮN MÁY ẢNH & TÊN APP PHOTOBAG — Ở màn chụp ảnh, bấm vào đây
+          mở/đóng bảng Tùy Chỉnh; ở các màn khác, bấm để quay lại chụp ảnh như trước. */}
       <div
-        onClick={() => onNavigate('camera')}
+        ref={logoRef}
+        onClick={handleLogoClick}
         className="pointer-events-auto cursor-pointer flex items-center gap-2 sm:gap-2.5 transition-transform duration-200 active:scale-95 group"
+        title={currentScreen === 'camera' ? 'Tùy chỉnh chức năng phụ' : 'Quay lại chụp ảnh'}
       >
         {/* Icon Chiếc Cặp Học Sinh Nhật Bản (Randoseru Trắng Nắp Xanh) Gắn Máy Ảnh */}
         <div className="relative w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 drop-shadow-[0_4px_10px_rgba(0,0,0,0.6)]">
@@ -207,18 +254,18 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             {/* Quai đeo vai phía sau (màu trắng viền xanh) */}
             <path d="M 13 18 C 13 6, 41 6, 41 18" stroke="#E2E8F0" strokeWidth="2.8" strokeLinecap="round" fill="none" />
             <path d="M 14 18 C 14 7.5, 40 7.5, 40 18" stroke="#3B82F6" strokeWidth="1" strokeLinecap="round" fill="none" />
-            
+
             {/* Quai xách đỉnh cặp (Quai Randoseru chuẩn Nhật) */}
             <path d="M 20 13 C 20 7.5, 34 7.5, 34 13" stroke="#1D4ED8" strokeWidth="3" strokeLinecap="round" fill="none" />
             <path d="M 22 13 C 22 9.5, 32 9.5, 32 13" stroke="#93C5FD" strokeWidth="1.2" strokeLinecap="round" fill="none" />
-            
+
             {/* Thân cặp học sinh Randoseru Nhật Bản (Màu trắng kem cao cấp) */}
             <rect x="8" y="14" width="38" height="34" rx="8" fill="#FFFFFF" stroke="#0F172A" strokeWidth="2.2" />
-            
+
             {/* Đường viền chỉ may & gân hông cặp */}
             <path d="M 11 20 L 11 43" stroke="#CBD5E1" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="1.5 2" />
             <path d="M 43 20 L 43 43" stroke="#CBD5E1" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="1.5 2" />
-            
+
             {/* Nắp gập đặc trưng của cặp Randoseru Nhật Bản (Màu xanh dương rực rỡ) */}
             <path
               d="M 8 18 C 8 13.5, 46 13.5, 46 18 L 45 28 C 45 32, 38 34, 27 34 C 16 34, 9 32, 9 28 Z"
@@ -232,26 +279,26 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
               fill="#3B82F6"
               opacity="0.9"
             />
-            
+
             {/* Khóa cài kim loại mạ bạc dưới nắp cặp */}
             <rect x="24.5" y="32.5" width="5" height="3.5" rx="1" fill="#E2E8F0" stroke="#0F172A" strokeWidth="1" />
             <circle cx="27" cy="34.2" r="0.8" fill="#3B82F6" />
-            
+
             {/* Móc treo kim loại 2 bên sườn cặp (Đặc trưng cặp Nhật) */}
             <rect x="5.8" y="24" width="2.4" height="4.5" rx="1" fill="#94A3B8" stroke="#0F172A" strokeWidth="0.8" />
             <rect x="45.8" y="24" width="2.4" height="4.5" rx="1" fill="#94A3B8" stroke="#0F172A" strokeWidth="0.8" />
-            
+
             {/* CỤM MÁY ẢNH GẮN Ở MẶT TRƯỚC CHIẾC CẶP (Vị trí trung tâm thanh lịch) */}
             <rect x="14" y="27" width="26" height="18" rx="4" fill="#0F172A" />
             <rect x="15" y="28" width="24" height="16" rx="3" fill="#1E293B" />
-            
+
             {/* Đỉnh gờ máy ảnh & nút chụp đỏ */}
             <rect x="18" y="26.2" width="18" height="2" rx="0.8" fill="#94A3B8" />
             <circle cx="20.5" cy="25.6" r="1.3" fill="#EF4444" />
-            
+
             {/* Kính ngắm & Đèn Flash màu vàng */}
             <rect x="33" y="29.5" width="4.5" height="3" rx="0.8" fill="#FBBF24" stroke="#0F172A" strokeWidth="0.8" />
-            
+
             {/* Ống kính máy ảnh trung tâm */}
             <circle cx="27" cy="36.5" r="6.5" fill="#0F172A" stroke="#60A5FA" strokeWidth="1.8" />
             <circle cx="27" cy="36.5" r="4.2" fill="#1D4ED8" />
@@ -284,27 +331,50 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         </div>
       </div>
 
-      {/* 3. GÓC PHẢI: NÚT TRÒN MỞ BẢNG CHỨC NĂNG PHỤ */}
-      <div className="relative pointer-events-auto" ref={settingsRef}>
-        <button
-          id="top-bar-settings-dropdown-btn"
-          onClick={() => setSettingsOpen(!settingsOpen)}
-          className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-full transition-all duration-200 active:scale-90 cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.35)] border ${
-            settingsOpen
-              ? 'bg-[#E86A7C] text-white border-white scale-105'
-              : 'bg-black/60 hover:bg-black/85 backdrop-blur-md text-[#F9F7F2] border-white/25 hover:border-white/40'
-          }`}
-          title="Tùy chỉnh chức năng phụ"
-          aria-label="Cài đặt & chức năng phụ"
-        >
-          <span className="material-symbols-outlined text-[20px] sm:text-[22px] transition-transform duration-200">
-            {settingsOpen ? 'close' : 'tune'}
-          </span>
-        </button>
+      {/* 3. GÓC PHẢI: WIDGET THEO CHẾ ĐỘ CHỤP (chỉ hiện ở giao diện chụp ảnh) + BẢNG TÙY CHỈNH */}
+      <div className="relative pointer-events-auto min-w-[40px] flex justify-end" ref={rightCornerRef}>
+        {currentScreen === 'camera' && (
+          <>
+            {/* Chế Độ Sự Kiện: nút In Nhanh — lấy đủ ảnh ở khung xem trước hiện tại, qua thẳng Chia Sẻ */}
+            {captureMode === 'event' && (
+              <button
+                id="top-bar-quick-print-btn"
+                onClick={onTriggerQuickPrint}
+                disabled={!burstPhotoCount}
+                className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full font-sans text-[10px] sm:text-xs uppercase tracking-[0.15em] font-bold transition-all active:scale-95 shadow-[0_4px_16px_rgba(0,0,0,0.35)] border ${
+                  burstPhotoCount
+                    ? 'bg-[#E86A7C] hover:bg-[#D8566A] text-white border-white/40 cursor-pointer'
+                    : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
+                }`}
+                title="In nhanh & chuyển sang Chia Sẻ"
+              >
+                <span className="material-symbols-outlined text-[16px] sm:text-[18px]">bolt</span>
+                <span>In Nhanh{burstPhotoCount ? ` (${burstPhotoCount})` : ''}</span>
+              </button>
+            )}
 
-        {/* BẢNG ĐIỀU KHIỂN CHỨC NĂNG PHỤ (FLOATING SETTINGS DRAWER / POPOVER) - GIAO DIỆN NỀN SÁNG CAO CẤP */}
-        {settingsOpen && (
-          <div className="absolute right-0 mt-2.5 w-72 sm:w-80 bg-[#F9F7F2]/95 backdrop-blur-2xl border border-black/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.25)] py-3 px-3 z-50 text-[#1A1A1A] animate-in fade-in zoom-in-95 duration-200 select-none">
+            {/* Chế Độ Photobooth / Mua Giờ: đồng hồ đếm ngược thời lượng phiên thuê máy */}
+            {captureMode === 'photobooth' && remainingClamped !== null && (
+              <div
+                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/25 text-[#F9F7F2] shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+                title="Thời gian còn lại của phiên"
+              >
+                <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-amber-300">schedule</span>
+                <span className="font-mono text-xs sm:text-sm font-bold tracking-wider">
+                  {Math.floor(remainingClamped / 60).toString().padStart(2, '0')}:
+                  {(remainingClamped % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+            )}
+
+            {/* Chế Độ Chụp Tự Do: không hiện gì ở vị trí này */}
+          </>
+        )}
+
+        {/* BẢNG ĐIỀU KHIỂN CHỨC NĂNG PHỤ (FLOATING SETTINGS DRAWER / POPOVER) — chỉ mở được ở giao
+            diện chụp ảnh, kích hoạt bằng cách bấm vào logo. GIAO DIỆN NỀN SÁNG CAO CẤP */}
+        {settingsOpen && currentScreen === 'camera' && (
+          <div className="absolute right-0 top-full mt-2.5 w-72 sm:w-80 bg-[#F9F7F2]/95 backdrop-blur-2xl border border-black/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.25)] py-3 px-3 z-50 text-[#1A1A1A] animate-in fade-in zoom-in-95 duration-200 select-none">
             {/* Header bảng */}
             <div className="flex items-center justify-between px-2 pb-2.5 border-b border-black/10 mb-2.5">
               <div className="flex items-center text-[#1A1A1A]">
@@ -391,6 +461,49 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                       );
                     })}
                   </div>
+                </div>
+              )}
+
+              {/* Mục 1.6: Độ Đậm Bộ Lọc & Độ Sáng (2 thanh trượt ngang — chuyển từ 2 thanh trượt dọc
+                  cũ trên khung camera vào đây) */}
+              {(onChangeIntensity || onChangeBrightness) && (
+                <div className="bg-black/5 rounded-xl p-2.5 border border-black/5 flex flex-col gap-3">
+                  {onChangeIntensity && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-black/75 flex items-center gap-1.5 font-bold">
+                          <Sliders className="w-3.5 h-3.5 text-[#3B82F6]" /> Độ Đậm Bộ Lọc
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#2563EB]">{currentFilterIntensity}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={currentFilterIntensity}
+                        onChange={(e) => onChangeIntensity(Number(e.target.value))}
+                        className="w-full h-1 bg-[#1A1A1A]/20 appearance-none cursor-pointer accent-[#2563EB] rounded-full"
+                      />
+                    </div>
+                  )}
+                  {onChangeBrightness && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-black/75 flex items-center gap-1.5 font-bold">
+                          <Sun className="w-3.5 h-3.5 text-[#3B82F6]" /> Độ Sáng
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#2563EB]">{brightness}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={50}
+                        max={150}
+                        value={brightness}
+                        onChange={(e) => onChangeBrightness(Number(e.target.value))}
+                        className="w-full h-1 bg-[#1A1A1A]/20 appearance-none cursor-pointer accent-[#2563EB] rounded-full"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -596,7 +709,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                 </button>
               )}
 
-              {/* Mục 9: Quản Trị Viên & Kiosk Dashboard (Bảo mật bằng PIN) */}
+              {/* Mục 9: Quản Trị Viên & Kiosk Dashboard (Bảo mật bằng PIN) — luôn giữ ở đây để chỉnh nhanh */}
               {onOpenAdminDashboard && (
                 <button
                   onClick={() => {
