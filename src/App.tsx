@@ -475,6 +475,24 @@ export default function App() {
   // Số ảnh đang có ở khung xem trước hiện tại (CameraScreen báo ra) — dùng để bật/tắt nút In Nhanh
   const [burstPhotoCountInProgress, setBurstPhotoCountInProgress] = useState<number>(0);
 
+  // Trigger "In" ở giao diện Thư Viện (góc trên phải, đối xứng nút Chụp Ảnh bên trái) — đăng ký từ
+  // GalleryScreen, theo đúng mẫu shutter/In Nhanh.
+  const galleryPrintTriggerRef = React.useRef<(() => void) | null>(null);
+
+  const handleRegisterGalleryPrint = React.useCallback((triggerFn: () => void) => {
+    galleryPrintTriggerRef.current = triggerFn;
+  }, []);
+
+  const handleTriggerGalleryPrint = React.useCallback(() => {
+    resetActivity();
+    if (currentScreen === 'gallery' && galleryPrintTriggerRef.current) {
+      galleryPrintTriggerRef.current();
+    }
+  }, [currentScreen, resetActivity]);
+
+  // Đã gán đủ ô hậu kỳ ở Thư Viện chưa (GalleryScreen báo ra) — dùng để bật/tắt nút "In"
+  const [galleryIsComplete, setGalleryIsComplete] = useState<boolean>(false);
+
   // ==========================================
   // ĐỒNG HỒ ĐẾM NGƯỢC PHIÊN THUÊ MÁY (CHẾ ĐỘ PHOTOBOOTH / MUA GIỜ)
   // ==========================================
@@ -629,6 +647,8 @@ export default function App() {
           burstPhotoCount={burstPhotoCountInProgress}
           onTriggerQuickPrint={handleTriggerQuickPrint}
           photoboothRemainingSeconds={photoboothRemainingSeconds}
+          onTriggerGalleryPrint={handleTriggerGalleryPrint}
+          galleryPrintReady={galleryIsComplete}
           onOpenAdminDashboard={() => {
             setAdminInitialTab(null);
             setIsAdminModalOpen(true);
@@ -702,13 +722,15 @@ export default function App() {
           )}
 
           {currentScreen === 'gallery' && (
-            <div className="w-full h-full pt-14 sm:pt-16 pb-24 sm:pb-28 overflow-y-auto overflow-x-hidden overscroll-contain">
+            <div className="w-full h-full pt-14 sm:pt-16 pb-6 sm:pb-8 overflow-y-auto overflow-x-hidden overscroll-contain">
               <GalleryScreen
                 onNavigate={handleNavigate}
                 capturedPhotos={capturedPhotos}
                 onDeletePhoto={handleDeletePhoto}
                 selectedLayout={selectedLayout}
                 onConfirmSelection={handleUseSessionForShare}
+                onRegisterPrintTrigger={handleRegisterGalleryPrint}
+                onUpdateCompletionStatus={setGalleryIsComplete}
               />
             </div>
           )}
@@ -758,8 +780,9 @@ export default function App() {
         </main>
       )}
 
-      {/* Bottom Navigation Dock - Hidden on idle, layout selection, and share screens */}
-      {currentScreen !== 'idle' && currentScreen !== 'share' && currentScreen !== 'layout' && (
+      {/* Bottom Navigation Dock - Hidden on idle, layout selection, share, and gallery screens
+          (Thư Viện không cần nút chụp tròn nữa — nút "In" đã chuyển lên góc trên phải) */}
+      {currentScreen !== 'idle' && currentScreen !== 'share' && currentScreen !== 'layout' && currentScreen !== 'gallery' && (
         <BottomNavBar
           currentScreen={currentScreen}
           onNavigate={handleNavigate}
