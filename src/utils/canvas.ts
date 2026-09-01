@@ -193,6 +193,96 @@ function drawFilmPerforations(ctx: CanvasRenderingContext2D, x: number, y: numbe
   ctx.restore();
 }
 
+/**
+ * Draw decorative dashed FOLD line (khác với đường CẮT — dùng biểu tượng gấp thay vì kéo)
+ */
+function drawDashedFoldLine(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color = 'rgba(0,0,0,0.35)') {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([10, 6]);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const isVertical = Math.abs(x2 - x1) < Math.abs(y2 - y1);
+
+  ctx.save();
+  ctx.translate(midX, midY);
+  if (isVertical) ctx.rotate(Math.PI / 2);
+  ctx.fillStyle = color;
+  ctx.font = '600 10px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = '2px';
+  ctx.fillText('⟨ GẤP ĐÔI TẠI ĐÂY ⟩', 0, 4);
+  ctx.restore();
+  ctx.restore();
+}
+
+/**
+ * Đục các lỗ tròn xuyên thấu (perforation) dọc theo 1 cạnh, mô phỏng viền vé/tem răng cưa.
+ * Dùng destination-out để tạo lỗ trong suốt thật sự trên canvas.
+ */
+function drawPerforatedEdge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  length: number,
+  isVertical: boolean,
+  notchRadius = 9,
+  gap = 26
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = '#000000';
+  const count = Math.floor(length / gap);
+  for (let i = 0; i <= count; i++) {
+    const pos = i * gap;
+    ctx.beginPath();
+    if (isVertical) {
+      ctx.arc(x, y + pos, notchRadius, 0, Math.PI * 2);
+    } else {
+      ctx.arc(x + pos, y, notchRadius, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * Vẽ hình đĩa than vinyl (các rãnh đồng tâm + nhãn tròn ở giữa)
+ */
+function drawVinylDiscGraphic(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+  ctx.fillStyle = '#0A0A0A';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 6; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, (r * i) / 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#EAB308';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#0A0A0A';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 export interface SlotRect {
   x: number;
   y: number;
@@ -259,6 +349,49 @@ export function computeSlotRects(
 ): SlotRect[] {
   const rects: SlotRect[] = [];
   const padding = 36;
+
+  // 0. KIỂU THIỆP GẤP ĐÔI (vinyl-foldcard, branded-foldcard): bất kể bố cục nào được chọn,
+  // ép toàn bộ ảnh chỉ nằm gọn trong nửa "khung ảnh" của thiệp — nửa còn lại dành cho hình đĩa
+  // than / mảng thương hiệu (vẽ riêng ở renderBackgroundAndThemeBase). Khách in ra rồi tự gấp đôi.
+  if (frameStyle === 'vinyl-foldcard' || frameStyle === 'branded-foldcard') {
+    const photoCount = LAYOUT_OPTIONS.find((o) => o.id === layout)?.photoCount || 1;
+    const isLandscape = canvasWidth >= canvasHeight;
+    const half = isLandscape ? canvasWidth / 2 : canvasHeight / 2;
+    const foldPad = 28;
+
+    let areaX: number, areaY: number, areaW: number, areaH: number;
+    if (isLandscape) {
+      areaX = half + foldPad;
+      areaY = padding;
+      areaW = canvasWidth - half - foldPad - padding;
+      areaH = canvasHeight - padding * 2;
+    } else {
+      areaX = padding;
+      areaY = half + foldPad;
+      areaW = canvasWidth - padding * 2;
+      areaH = canvasHeight - half - foldPad - padding;
+    }
+
+    const count = Math.max(1, Math.min(photoCount, 4));
+    const gap = 14;
+    if (count === 1) {
+      rects.push({ x: areaX, y: areaY, w: areaW, h: areaH, slotIndex: 0 });
+    } else {
+      const stackVertical = areaH >= areaW;
+      if (stackVertical) {
+        const cellH = (areaH - gap * (count - 1)) / count;
+        for (let i = 0; i < count; i++) {
+          rects.push({ x: areaX, y: areaY + i * (cellH + gap), w: areaW, h: cellH, slotIndex: i });
+        }
+      } else {
+        const cellW = (areaW - gap * (count - 1)) / count;
+        for (let i = 0; i < count; i++) {
+          rects.push({ x: areaX + i * (cellW + gap), y: areaY, w: cellW, h: areaH, slotIndex: i });
+        }
+      }
+    }
+    return rects;
+  }
 
   // 1. DẢI ĐÔI DỌC (double-2-vert, double-3-vert, double-4-vert)
   if (layout === 'double-2-vert' || layout === 'double-3-vert' || layout === 'double-4-vert') {
@@ -697,7 +830,11 @@ export async function generatePhotostripCanvas(params: {
 
         const rotation = custom?.rotation || 0;
         const flipH = custom?.flipH || false;
-        const bRadius = frameStyle === 'polaroid' ? 4 : frameStyle === 'cinema-film' ? 0 : 6;
+        const bRadius =
+          frameStyle === 'polaroid' ? 4
+          : frameStyle === 'cinema-film' ? 0
+          : frameStyle === 'concert-ticket' || frameStyle === 'train-ticket' ? 4
+          : 6;
 
         drawImageTransformed(ctx, img, slot.x, slot.y, slot.w, slot.h, bRadius, rotation, flipH);
         ctx.restore();
@@ -733,8 +870,8 @@ export async function generatePhotostripCanvas(params: {
     }
   }
 
-  // 3. DRAW DASHED CUT LINES IF DOUBLE STRIP
-  if (isDouble) {
+  // 3. DRAW DASHED CUT LINES IF DOUBLE STRIP (bỏ qua với kiểu thiệp gấp đôi — đã có đường gấp riêng)
+  if (isDouble && frameStyle !== 'vinyl-foldcard' && frameStyle !== 'branded-foldcard') {
     if (orientation === 'vertical') {
       const midX = canvasWidth / 2;
       drawDashedCutLine(ctx, midX, 20, midX, canvasHeight - 20, 'rgba(0,0,0,0.3)');
@@ -1044,6 +1181,108 @@ function renderBackgroundAndThemeBase(
     ctx.strokeStyle = '#D97706';
     ctx.lineWidth = 2;
     ctx.strokeRect(10, 10, w - 20, h - 20);
+  } else if (frameStyle === 'nutrition-label') {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = '#1A1A1A';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+
+    // Thanh tiêu đề đậm kiểu nhãn thực phẩm
+    ctx.fillStyle = '#1A1A1A';
+    ctx.fillRect(10, 10, w - 20, 64);
+  } else if (frameStyle === 'scrapbook') {
+    ctx.fillStyle = '#EFE7D8';
+    ctx.fillRect(0, 0, w, h);
+
+    // Vân giấy kraft mờ
+    ctx.strokeStyle = 'rgba(140,122,91,0.08)';
+    ctx.lineWidth = 1;
+    for (let i = -h; i < w; i += 26) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + h, h);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(58,51,42,0.25)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 6]);
+    ctx.strokeRect(20, 20, w - 40, h - 40);
+    ctx.setLineDash([]);
+  } else if (frameStyle === 'concert-ticket') {
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#1A1A2E');
+    grad.addColorStop(1, '#2D1B4E');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(245,214,123,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
+    ctx.strokeRect(14, 14, w - 28, h - 28);
+    ctx.setLineDash([]);
+
+    // Viền răng cưa (đục lỗ) hai cạnh ngắn (đầu vé)
+    drawPerforatedEdge(ctx, w / 2, 0, w, false, 8, 24);
+    drawPerforatedEdge(ctx, w / 2, h, w, false, 8, 24);
+  } else if (frameStyle === 'vinyl-foldcard') {
+    ctx.fillStyle = '#2B2623';
+    ctx.fillRect(0, 0, w, h);
+
+    const isLandscape = w >= h;
+    const half = isLandscape ? w / 2 : h / 2;
+
+    // Nửa bìa đĩa (bên trái/trên) đậm màu hơn để phân biệt với nửa ảnh
+    ctx.fillStyle = '#221E1B';
+    if (isLandscape) {
+      ctx.fillRect(0, 0, half, h);
+    } else {
+      ctx.fillRect(0, 0, w, half);
+    }
+
+    drawVinylDiscGraphic(ctx, isLandscape ? half / 2 : w / 2, isLandscape ? h / 2 : half / 2, Math.min(half, isLandscape ? h : w) * 0.32);
+
+    if (isLandscape) {
+      drawDashedFoldLine(ctx, half, 24, half, h - 24, 'rgba(243,236,228,0.55)');
+    } else {
+      drawDashedFoldLine(ctx, 24, half, w - 24, half, 'rgba(243,236,228,0.55)');
+    }
+  } else if (frameStyle === 'branded-foldcard') {
+    ctx.fillStyle = '#F9F7F2';
+    ctx.fillRect(0, 0, w, h);
+
+    const isLandscape = w >= h;
+    const half = isLandscape ? w / 2 : h / 2;
+
+    ctx.fillStyle = '#1A1A1A';
+    if (isLandscape) {
+      ctx.fillRect(0, 0, half, h);
+    } else {
+      ctx.fillRect(0, 0, w, half);
+    }
+
+    if (isLandscape) {
+      drawDashedFoldLine(ctx, half, 24, half, h - 24, 'rgba(26,26,26,0.4)');
+    } else {
+      drawDashedFoldLine(ctx, 24, half, w - 24, half, 'rgba(26,26,26,0.4)');
+    }
+  } else if (frameStyle === 'train-ticket') {
+    ctx.fillStyle = '#F5F0E4';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(74,58,36,0.3)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, w - 24, h - 24);
+
+    // Sọc màu đầu vé kiểu vé tàu
+    ctx.fillStyle = '#8C6239';
+    ctx.fillRect(12, 12, w - 24, 22);
+
+    // Viền răng cưa (đục lỗ) hai cạnh trái/phải
+    drawPerforatedEdge(ctx, 0, h / 2, h, true, 8, 26);
+    drawPerforatedEdge(ctx, w, h / 2, h, true, 8, 26);
   } else {
     ctx.fillStyle = frameInfo.hex;
     ctx.fillRect(0, 0, w, h);
@@ -1259,6 +1498,230 @@ function renderThemeOverlaysAndTypography(
     ctx.fillText(`PRODUCED BY STUDIO • RELEASE: ${dateStr}`, w / 2, footY + 24);
 
     drawBarcode(ctx, w / 2 - 90, footY + 35, 180, 30, '#F3ECE4');
+  }
+
+  // I. NHÃN DINH DƯỠNG KỶ NIỆM
+  else if (frameStyle === 'nutrition-label') {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 24px Inter, Arial, sans-serif';
+    ctx.letterSpacing = '1px';
+    ctx.fillText('NHÃN DINH DƯỠNG KỶ NIỆM', 30, 52);
+
+    ctx.textAlign = 'right';
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText('MEMORY FACTS', w - 30, 52);
+
+    const footY = h - 150;
+
+    // Nền trắng dạng nhãn dán để chữ luôn rõ dù đè lên ảnh
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.strokeStyle = '#1A1A1A';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(16, footY - 26, w - 32, 176, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#1A1A1A';
+    ctx.font = '700 13px Inter, sans-serif';
+    ctx.fillText(`KHẨU PHẦN: 1 KỶ NIỆM • NGÀY: ${dateStr}`, 30, footY);
+
+    ctx.strokeStyle = '#1A1A1A';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(20, footY + 14);
+    ctx.lineTo(w - 20, footY + 14);
+    ctx.stroke();
+
+    const ingredients = [
+      'TÌNH YÊU ................ 100%',
+      'NIỀM TIN ................ 100%',
+      'HẠNH PHÚC .............. 100%',
+      'TIẾNG CƯỜI .............. 100%',
+    ];
+    ctx.font = '500 13px monospace';
+    ingredients.forEach((line, idx) => {
+      ctx.fillText(line, 30, footY + 40 + idx * 22);
+    });
+
+    ctx.textAlign = 'right';
+    ctx.font = '700 12px Inter, sans-serif';
+    ctx.fillText(customTitle.toUpperCase() || 'STUDIO MEMORIES', w - 30, footY + 12);
+
+    drawBarcode(ctx, w / 2 - 110, h - 42, 220, 26, '#1A1A1A');
+  }
+
+  // J. SỔ LƯU NIỆM CẮT DÁN (SCRAPBOOK)
+  else if (frameStyle === 'scrapbook') {
+    // Băng keo washi ở góc mỗi tấm ảnh
+    const tapeColors = ['rgba(217,119,6,0.55)', 'rgba(219,39,119,0.5)', 'rgba(59,130,246,0.45)', 'rgba(16,185,129,0.45)'];
+    params.slotRects.forEach((slot, idx) => {
+      ctx.save();
+      ctx.translate(slot.x + 16, slot.y);
+      ctx.rotate(-0.14);
+      ctx.fillStyle = tapeColors[idx % tapeColors.length];
+      ctx.fillRect(-26, -9, 52, 18);
+      ctx.restore();
+    });
+
+    // Nền giấy note dán bên dưới để chữ viết tay luôn rõ dù đè lên ảnh
+    ctx.save();
+    ctx.fillStyle = 'rgba(239,231,216,0.94)';
+    ctx.strokeStyle = 'rgba(140,122,91,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(w / 2 - 260, h - 88, 520, 68, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate(w / 2, h - 50);
+    ctx.rotate(-0.02);
+    ctx.fillStyle = '#3A332A';
+    ctx.font = 'italic 700 28px "Caveat", "Brush Script MT", cursive, serif';
+    ctx.fillText(customTitle || 'Những khoảnh khắc đáng nhớ ♡', 0, 0);
+    ctx.restore();
+
+    ctx.font = '400 12px Inter, sans-serif';
+    ctx.fillStyle = '#8C7A5B';
+    ctx.fillText(dateStr, w / 2, h - 26);
+  }
+
+  // K. VÉ CONCERT / BOOKMARK (K-POP)
+  else if (frameStyle === 'concert-ticket') {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#F5D67B';
+    ctx.font = '900 22px "Montserrat", Impact, sans-serif';
+    ctx.letterSpacing = '4px';
+    ctx.fillText('★ ADMIT ONE • VIP PASS ★', w / 2, 42);
+
+    ctx.font = '600 12px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(245,214,123,0.75)';
+    ctx.letterSpacing = '2px';
+    ctx.fillText(customTitle.toUpperCase() || 'LIVE MEMORY TOUR', w / 2, 64);
+
+    const footY = h - 150;
+
+    // Nền tối mờ phía sau danh sách bài hát & QR để luôn rõ dù đè lên ảnh
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,10,20,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(16, footY - 30, w - 32, 172, 8);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.textAlign = 'left';
+    ctx.font = '700 12px monospace';
+    ctx.fillStyle = '#F5D67B';
+    ['01. INTRO', '02. FIRST MEET', '03. LAUGH TOGETHER', '04. MEMORIES'].forEach((t, idx) => {
+      ctx.fillText(t, 30, footY + idx * 20);
+    });
+
+    // Ô QR trang trí (mô phỏng hoạ tiết, không phải mã QR thật)
+    const qrSize = 90;
+    const qrX = w - 30 - qrSize;
+    const qrY = footY - 10;
+    ctx.fillStyle = '#F9F7F2';
+    ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    ctx.fillStyle = '#1A1A1A';
+    const cell = qrSize / 7;
+    for (let r = 0; r < 7; r++) {
+      for (let c = 0; c < 7; c++) {
+        if ((r + c) % 2 === 0 || r === 0 || c === 0 || r === 6 || c === 6) {
+          ctx.fillRect(qrX + c * cell, qrY + r * cell, cell, cell);
+        }
+      }
+    }
+
+    ctx.textAlign = 'center';
+    ctx.font = '500 10px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(245,214,123,0.6)';
+    ctx.fillText(dateStr, w / 2, h - 22);
+  }
+
+  // L. THIỆP GẤP ĐĨA NHẠC (VINYL FOLD CARD)
+  else if (frameStyle === 'vinyl-foldcard') {
+    const isLandscape = w >= h;
+    const half = isLandscape ? w / 2 : h / 2;
+    const labelCx = isLandscape ? half / 2 : w / 2;
+    const labelCy = isLandscape ? h - 70 : half - 40;
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#F3ECE4';
+    ctx.font = '700 20px "Newsreader", serif';
+    ctx.letterSpacing = '3px';
+    ctx.fillText('SIDE A', labelCx, labelCy);
+
+    ctx.font = '500 11px monospace';
+    ctx.fillStyle = 'rgba(243,236,228,0.7)';
+    ctx.fillText(customTitle.toUpperCase() || 'LOVE SONG', labelCx, labelCy + 24);
+
+    ctx.font = '400 10px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(243,236,228,0.5)';
+    ctx.fillText(dateStr, w / 2, h - 22);
+  }
+
+  // M. THIỆP GẤP THƯƠNG HIỆU (BRANDED FOLD CARD)
+  else if (frameStyle === 'branded-foldcard') {
+    const isLandscape = w >= h;
+    const half = isLandscape ? w / 2 : h / 2;
+    const cx = isLandscape ? half / 2 : w / 2;
+    const cy = isLandscape ? h / 2 - 20 : half / 2 - 10;
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 26px "Newsreader", Georgia, serif';
+    ctx.letterSpacing = '3px';
+    ctx.fillText(customTitle.toUpperCase() || 'SOCIAL CLUB', cx, cy);
+
+    ctx.font = '500 11px Inter, sans-serif';
+    ctx.letterSpacing = '4px';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(dateStr.toUpperCase() || 'MEMBERS ONLY', cx, cy + 26);
+  }
+
+  // N. VÉ TÀU KỶ NIỆM (TRAIN TICKET)
+  else if (frameStyle === 'train-ticket') {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#F5F0E4';
+    ctx.font = '700 13px Inter, sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText('GA KỶ NIỆM  →  GA HẠNH PHÚC', 30, 28);
+
+    const footY = h - 90;
+    ctx.fillStyle = '#4A3A24';
+    ctx.font = '600 12px monospace';
+    ctx.fillText(`GHẾ: A-01 • TOA: 01 • ${dateStr}`, 30, footY);
+
+    ctx.textAlign = 'right';
+    ctx.font = '700 13px Inter, sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText(customTitle.toUpperCase() || 'VÉ KỶ NIỆM', w - 30, footY);
+
+    drawBarcode(ctx, w / 2 - 100, h - 60, 200, 30, '#4A3A24');
+
+    // Dấu mộc tròn kỷ niệm
+    ctx.save();
+    ctx.translate(w - 90, 70);
+    ctx.rotate(-0.25);
+    ctx.strokeStyle = 'rgba(140,98,57,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 34, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = '700 9px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(140,98,57,0.6)';
+    ctx.textAlign = 'center';
+    ctx.fillText('PHOTOBAG', 0, -2);
+    ctx.fillText('MEMORY', 0, 10);
+    ctx.restore();
   }
 
   // H. CLASSIC STUDIO (DEFAULT)
