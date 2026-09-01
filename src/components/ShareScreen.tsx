@@ -9,24 +9,17 @@ import {
   Download,
   Film,
   Sparkles,
-  Columns,
-  Rows,
-  Layers,
   Image as ImageIcon,
   Check,
   Share2,
-  Printer,
   QrCode,
   Sliders,
-  Camera,
   RotateCw,
   FlipHorizontal,
   AlignLeft,
   AlignCenter,
   AlignRight,
-  Edit3,
   RefreshCw,
-  SlidersHorizontal,
   Shuffle,
   LayoutGrid,
 } from 'lucide-react';
@@ -57,8 +50,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   onLayoutChange,
   eventConfig,
   sessionVideoUrl,
-  onUpdatePhotoFilter,
-  onApplyFilterToAll,
   onUpdateConsent,
 }) => {
   const [publicConsent, setPublicConsent] = useState(true);
@@ -163,17 +154,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
       return {
         ...prev,
         [slotIdx]: { ...current, flipH: newFlip },
-      };
-    });
-  };
-
-  // Change individual filter for active slot
-  const handleFilterSlot = (slotIdx: number, filterId: string) => {
-    setSlotCustomizations((prev) => {
-      const current = prev[slotIdx] || { slotIndex: slotIdx, rotation: 0, flipH: false };
-      return {
-        ...prev,
-        [slotIdx]: { ...current, filterId, filterIntensity: current.filterIntensity ?? 80 },
       };
     });
   };
@@ -339,10 +319,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   // Helper render for photos with transformation - KHÔNG CÓ NÚT OVERLAY ĐÈ LÊN ẢNH
@@ -1135,130 +1111,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 </div>
               </div>
 
-              {/* HÀNG CÁC Ô KHUNG CỦA BỐ CỤC ĐANG CHỌN */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between text-[11px] font-sans">
-                  <span className="font-bold text-[#1A1A1A]">
-                    Danh sách các ô trên dải ảnh:
-                  </span>
-                  <span className="text-[#8C7A5B] text-[10px]">
-                    {activeSlotIndex !== null
-                      ? `👉 Đang chọn Ô #${activeSlotIndex + 1} (Chạm ảnh bên dưới để gán vào ô này)`
-                      : '💡 Chạm vào ô để đổi ảnh hoặc xoay/lật'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-                  {Array.from({ length: requiredCount }).map((_, slotIdx) => {
-                    const assignedPhoto = stripPhotos[slotIdx] || availablePool[slotIdx % Math.max(1, availablePool.length)];
-                    const isSelectedSlot = activeSlotIndex === slotIdx;
-                    const custom = slotCustomizations[slotIdx];
-                    const rotation = custom?.rotation || 0;
-                    const flipH = custom?.flipH || false;
-                    const filterId = custom?.filterId || assignedPhoto?.filterId || currentFilterId || 'original';
-                    const intensity = custom?.filterIntensity ?? assignedPhoto?.filterIntensity ?? currentFilterIntensity ?? 80;
-                    const preset = FILTER_PRESETS.find((p) => p.id === filterId) || FILTER_PRESETS[0];
-
-                    return (
-                      <div
-                        key={slotIdx}
-                        onClick={() => setActiveSlotIndex(slotIdx)}
-                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer relative ${
-                          isSelectedSlot
-                            ? 'bg-white border-amber-500 ring-3 ring-amber-400/80 shadow-md scale-[1.02]'
-                            : 'bg-[#F9F7F2] border-[#1A1A1A]/15 hover:border-[#1A1A1A]/40 hover:bg-white shadow-2xs'
-                        }`}
-                      >
-                        {/* Header của ô */}
-                        <div className="w-full flex items-center justify-between px-0.5">
-                          <span
-                            className={`text-[9.5px] font-mono font-bold px-1.5 py-0.2 rounded-md ${
-                              isSelectedSlot
-                                ? 'bg-amber-400 text-black shadow-xs'
-                                : 'bg-[#1A1A1A]/10 text-[#1A1A1A]'
-                            }`}
-                          >
-                            Ô #{slotIdx + 1}
-                          </span>
-                          {isSelectedSlot && (
-                            <span className="text-[8.5px] text-amber-700 font-bold uppercase tracking-wider">
-                              Đang Chọn
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Thumbnail ảnh trong ô */}
-                        <div className="w-full aspect-[4/3] rounded-lg overflow-hidden bg-black/5 relative border border-black/10 flex items-center justify-center">
-                          {assignedPhoto?.dataUrl ? (
-                            <div
-                              className="w-full h-full flex items-center justify-center transition-transform duration-200"
-                              style={{
-                                transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
-                              }}
-                            >
-                              <img
-                                src={assignedPhoto.dataUrl}
-                                alt={`Ô #${slotIdx + 1}`}
-                                className="w-full h-full object-cover block"
-                                style={{
-                                  filter: preset ? preset.filterCss(intensity) : 'none',
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-gray-400">Trống</span>
-                          )}
-
-                          {/* Quick indicators */}
-                          <div className="absolute bottom-1 right-1 flex items-center gap-0.5">
-                            {rotation > 0 && (
-                              <span className="text-[7.5px] bg-black/70 text-white px-1 py-0.2 rounded-xs font-mono">
-                                {rotation}°
-                              </span>
-                            )}
-                            {flipH && (
-                              <span className="text-[7.5px] bg-black/70 text-white px-1 py-0.2 rounded-xs">
-                                ↔
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Nút thao tác nhanh dưới ô */}
-                        <div className="w-full flex items-center justify-between gap-1 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRotateSlot(slotIdx);
-                            }}
-                            className="flex-1 py-1 px-1 bg-white hover:bg-amber-100 text-[#1A1A1A] border border-[#1A1A1A]/15 rounded-md text-[9px] font-sans font-bold flex items-center justify-center gap-0.5 transition-colors"
-                            title="Xoay ảnh 90°"
-                          >
-                            <RotateCw className="w-2.5 h-2.5 text-amber-700" />
-                            <span>Xoay</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleFlipSlot(slotIdx);
-                            }}
-                            className={`flex-1 py-1 px-1 rounded-md text-[9px] font-sans font-bold flex items-center justify-center gap-0.5 border transition-colors ${
-                              flipH
-                                ? 'bg-amber-400 text-black border-amber-500'
-                                : 'bg-white hover:bg-amber-100 text-[#1A1A1A] border-[#1A1A1A]/15'
-                            }`}
-                            title="Lật gương ngang"
-                          >
-                            <FlipHorizontal className="w-2.5 h-2.5 text-amber-700" />
-                            <span>Lật</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              {/* GỢI Ý THAO TÁC: Chạm ảnh trên dải xem trước phía trên để chọn ô + xoay/lật,
+                  rồi chạm ảnh trong Kho Ảnh bên dưới để gán ảnh khác vào ô đang chọn. */}
+              <div className="flex items-center justify-between text-[11px] font-sans">
+                <span className="font-bold text-[#1A1A1A]">
+                  {activeSlotIndex !== null
+                    ? `👉 Đang chọn Ô #${activeSlotIndex + 1} — chạm ảnh bên dưới để gán vào ô này`
+                    : '💡 Chạm vào 1 ảnh trên dải xem trước phía trên để chọn ô cần đổi'}
+                </span>
               </div>
 
               {/* KHO ẢNH CHỤP TRONG PHIÊN ĐỂ NGƯỜI DÙNG BẤM CHỌN THAY ĐỔI */}
@@ -1332,111 +1192,13 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
             </section>
 
-            {/* KHỐI 3: BỘ LỌC NGHỆ THUẬT (CHỈNH SỬA BỘ LỌC TRONG TAB CHIA SẺ) */}
-            <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-[#8C7A5B]" />
-                  <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    3. Bộ Lọc Nghệ Thuật:
-                  </h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  {hasActiveSlot && (
-                    <span className="text-[9px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">
-                      Đang chỉnh riêng Ô #{activeSlotIndex! + 1}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-bold text-[#8C7A5B]">
-                    {hasActiveSlot && activeSlotCustom?.filterId
-                      ? FILTER_PRESETS.find((f) => f.id === activeSlotCustom.filterId)?.name
-                      : FILTER_PRESETS.find((f) => f.id === currentFilterId)?.name}
-                  </span>
-                </div>
-              </div>
-
-              {/* Dải chọn bộ lọc ngang phong cách trực quan */}
-              <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-9 gap-2">
-                {FILTER_PRESETS.map((f) => {
-                  const isCurrentActive = hasActiveSlot
-                    ? (activeSlotCustom?.filterId || currentFilterId) === f.id
-                    : currentFilterId === f.id;
-
-                  return (
-                    <button
-                      key={f.id}
-                      onClick={() => {
-                        if (hasActiveSlot && activeSlotIndex !== null) {
-                          handleFilterSlot(activeSlotIndex, f.id);
-                        } else if (onApplyFilterToAll) {
-                          onApplyFilterToAll(f.id, f.defaultIntensity);
-                        }
-                      }}
-                      className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
-                        isCurrentActive
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A] ring-2 ring-[#8C7A5B] shadow-xs'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/15 hover:border-[#1A1A1A]/60'
-                      }`}
-                    >
-                      {/* Icon màu đại diện */}
-                      <div
-                        className="w-6 h-6 rounded-full border border-black/20 shadow-inner flex items-center justify-center text-[10px]"
-                        style={{
-                          background:
-                            f.id === 'bw'
-                              ? 'linear-gradient(135deg, #111, #fff)'
-                              : f.id === 'vintage'
-                              ? 'linear-gradient(135deg, #d97706, #fef3c7)'
-                              : f.id === 'warm'
-                              ? 'linear-gradient(135deg, #f97316, #ffedd5)'
-                              : f.id === 'cool'
-                              ? 'linear-gradient(135deg, #0284c7, #e0f2fe)'
-                              : f.id === 'film'
-                              ? 'linear-gradient(135deg, #059669, #ecfdf5)'
-                              : f.id === 'cine'
-                              ? 'linear-gradient(135deg, #1e1b4b, #38bdf8)'
-                              : f.id === 'moody'
-                              ? 'linear-gradient(135deg, #4c0519, #fecdd3)'
-                              : f.id === 'glam'
-                              ? 'linear-gradient(135deg, #be185d, #fdf2f8)'
-                              : '#ffffff',
-                        }}
-                      >
-                        {isCurrentActive && <Check className={`w-3.5 h-3.5 ${f.id === 'bw' || f.id === 'cine' ? 'text-white' : 'text-black'}`} />}
-                      </div>
-                      <span className="text-[9px] font-sans font-medium text-center truncate w-full">
-                        {f.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Nút thao tác áp dụng bộ lọc */}
-              <div className="flex items-center justify-between pt-1 border-t border-[#1A1A1A]/10 text-[10px] text-[#1A1A1A]/70">
-                <span>{hasActiveSlot ? '💡 Bộ lọc đang chỉ áp dụng cho ô được chọn.' : '✨ Bộ lọc áp dụng đồng bộ cho toàn bộ dải ảnh.'}</span>
-                {hasActiveSlot && onApplyFilterToAll && (
-                  <button
-                    onClick={() => {
-                      const activeFId = activeSlotCustom?.filterId || currentFilterId;
-                      onApplyFilterToAll(activeFId, currentFilterIntensity);
-                      setSlotCustomizations({});
-                    }}
-                    className="px-2.5 py-1 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-white rounded-lg font-sans text-[9px] font-bold uppercase transition-colors cursor-pointer"
-                  >
-                    Áp Dụng Cho Tất Cả Các Ô
-                  </button>
-                )}
-              </div>
-            </section>
-
-            {/* KHỐI 4: CHỦ ĐỀ & KIỂU KHUNG */}
+            {/* KHỐI 3: CHỦ ĐỀ & KIỂU KHUNG */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    4. Kiểu Khung & Chủ Đề Nghệ Thuật:
+                    3. Kiểu Khung & Chủ Đề Nghệ Thuật:
                   </h3>
                 </div>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">
@@ -1481,7 +1243,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
                 <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                  5. Màu Giấy In & Chất Liệu Viền:
+                  4. Màu Giấy In & Chất Liệu Viền:
                 </span>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">{frameInfo.name}</span>
               </div>
@@ -1515,7 +1277,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             {/* KHỐI 6: TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                6. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
+                5. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1527,6 +1289,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     type="text"
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
+                    maxLength={40}
                     placeholder="VD: Jane & Johnny"
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
@@ -1539,6 +1302,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     type="text"
                     value={dateStr}
                     onChange={(e) => setDateStr(e.target.value)}
+                    maxLength={20}
                     placeholder="VD: 1-15-2019"
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
@@ -1553,24 +1317,18 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   rows={2}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
+                  maxLength={140}
                   placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
                   className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                 />
               </div>
             </section>
 
-            {/* NÚT HÀNH ĐỘNG DƯỚI CÙNG TRONG CHẾ ĐỘ BIÊN TẬP */}
-            <div className="flex flex-col sm:flex-row gap-2 mt-1">
-              <button
-                onClick={() => onNavigate('camera')}
-                className="flex-1 py-3 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
-              >
-                <Camera className="w-4 h-4 text-[#8C7A5B]" />
-                <span>Quay Lại Chụp Thêm Ảnh</span>
-              </button>
+            {/* NÚT HÀNH ĐỘNG DƯỚI CÙNG TRONG CHẾ ĐỘ BIÊN TẬP — quay lại chụp đã có sẵn ở nút góc trên (TopAppBar) nên chỉ cần 1 nút hành động chính ở đây */}
+            <div className="flex mt-1">
               <button
                 onClick={() => setActiveMode('export')}
-                className="flex-2 py-3 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-xs uppercase tracking-widest font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                className="w-full py-3 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-xs uppercase tracking-widest font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
                 <span>Chuyển Sang Xuất Bản & Tải Về</span>
                 <Share2 className="w-4 h-4" />
@@ -1651,25 +1409,16 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
             )}
 
-            {/* CHIA SẺ & IN ẤN */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                id="share-native-btn"
-                onClick={handleNativeShare}
-                className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold shadow-2xs"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>{copied ? 'Đã Sao Chép Liên Kết!' : 'Chia Sẻ Liên Kết'}</span>
-              </button>
-
-              <button
-                onClick={handlePrint}
-                className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold shadow-2xs"
-              >
-                <Printer className="w-4 h-4" />
-                <span>In Trực Tiếp (Khổ 4x6 / 6x4 inch)</span>
-              </button>
-            </div>
+            {/* CHIA SẺ LIÊN KẾT — đã bỏ nút "In Trực Tiếp" vì chỉ gọi in cả trang web (window.print),
+                không in đúng ảnh dải, dễ gây hiểu lầm là in được trong khi chưa nối máy in thật. */}
+            <button
+              id="share-native-btn"
+              onClick={handleNativeShare}
+              className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold shadow-2xs"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>{copied ? 'Đã Sao Chép Liên Kết!' : 'Chia Sẻ Liên Kết'}</span>
+            </button>
 
             {/* Mã QR Quét Tải Về Điện Thoại */}
             <div className="bg-[#F9F7F2] p-3.5 rounded-xl border border-[#1A1A1A]/15 flex items-center gap-3.5">
@@ -1754,18 +1503,11 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               />
             </div>
 
-            {/* HÀNG NÚT ĐIỀU HƯỚNG */}
-            <div className="flex flex-col sm:flex-row gap-2 mt-1">
-              <button
-                onClick={() => onNavigate('camera')}
-                className="flex-1 py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold"
-              >
-                <Camera className="w-4 h-4 text-[#8C7A5B]" />
-                <span>Quay Lại Chụp Thêm</span>
-              </button>
+            {/* HÀNG NÚT ĐIỀU HƯỚNG — quay lại chụp đã có sẵn ở nút góc trên (TopAppBar) */}
+            <div className="flex mt-1">
               <button
                 onClick={() => setActiveMode('edit')}
-                className="flex-1 py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold"
+                className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold"
               >
                 <Sliders className="w-4 h-4" />
                 <span>Chỉnh Sửa Khung & Bố Cục</span>
