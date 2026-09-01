@@ -119,15 +119,11 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
           <button
             id="top-bar-back-to-camera-btn"
             onClick={() => onNavigate('camera')}
-            className="pointer-events-auto group flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/60 hover:bg-black/85 backdrop-blur-md border border-white/25 text-[#F9F7F2] transition-all active:scale-95 duration-200 shadow-[0_4px_16px_rgba(0,0,0,0.3)] cursor-pointer"
+            className="pointer-events-auto flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
             title="Quay lại chụp ảnh"
           >
-            <span className="material-symbols-outlined text-[17px] group-hover:-translate-x-0.5 transition-transform">
-              arrow_back
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-sans uppercase tracking-widest font-bold">
-              Chụp Ảnh
-            </span>
+            <span className="material-symbols-outlined text-[16px] sm:text-[18px]">add_a_photo</span>
+            <span>Chụp Ảnh</span>
           </button>
         ) : (
           <div

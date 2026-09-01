@@ -104,27 +104,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto pt-2 md:pt-6 px-4 md:px-8 flex flex-col gap-6 select-none pb-28 md:pb-12 text-[#1A1A1A]">
-      {/* Tiêu Đề */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1A1A1A]/10 pb-4">
-        <div>
-          <span className="font-sans text-[9px] uppercase tracking-[0.3em] text-[#8C7A5B]">
-            THƯ VIỆN ẢNH
-          </span>
-          <h2 className="font-serif text-2xl md:text-3xl font-light text-[#1A1A1A] mt-0.5">
-            Tất Cả Ảnh Đã Chụp
-          </h2>
-          <p className="text-[11px] font-sans text-[#1A1A1A]/60 uppercase tracking-widest mt-1">
-            {capturedPhotos.length} Tấm Ảnh • {sessions.length} Lượt Chụp
-          </p>
-        </div>
-
-        <button
-          onClick={() => onNavigate('camera')}
-          className="px-5 py-2.5 bg-[#1A1A1A] text-[#F9F7F2] font-sans text-xs uppercase tracking-[0.2em] hover:bg-[#8C7A5B] transition-all flex items-center gap-2 shadow-sm self-start md:self-auto"
-        >
-          <span className="material-symbols-outlined text-[16px]">add_a_photo</span>
-          <span>Chụp Thêm</span>
-        </button>
+      {/* Tiêu Đề (rút gọn chỉ còn dòng thống kê — đã có nút quay lại chụp ảnh ở thanh trên) */}
+      <div className="border-b border-[#1A1A1A]/10 pb-3">
+        <p className="text-[11px] font-sans text-[#1A1A1A]/60 uppercase tracking-widest">
+          {capturedPhotos.length} Tấm Ảnh • {sessions.length} Lượt Chụp
+        </p>
       </div>
 
       {/* Trạng Thái Trống */}
