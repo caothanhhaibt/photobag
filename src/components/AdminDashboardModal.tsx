@@ -43,6 +43,8 @@ import {
   ChevronRight,
   Wifi,
   Loader2,
+  History,
+  RotateCcw,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -124,6 +126,11 @@ interface AdminDashboardModalProps {
   onUpdateEventConfig: (newConfig: EventConfig) => void;
   capturedPhotos: CapturedPhoto[];
   onResetPhotos: () => void;
+  // Ẩn ảnh cũ theo phiên/sự kiện (bảo mật cho khách trước) — ảnh chụp trước mốc này bị ẩn khỏi Thư
+  // Viện của khách thường, nhưng vẫn còn nguyên trong `capturedPhotos` để tab Lịch Sử Đầy Đủ xem lại.
+  gallerySessionStartedAt: number;
+  onHideGalleryNow: () => void;
+  onRestorePhoto: (id: string) => void;
   analyticsStats: AnalyticsStats;
   onResetAnalytics: () => void;
   // Các cài đặt nhanh khác
@@ -156,6 +163,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onUpdateEventConfig,
   capturedPhotos,
   onResetPhotos,
+  gallerySessionStartedAt,
+  onHideGalleryNow,
+  onRestorePhoto,
   analyticsStats,
   onResetAnalytics,
   soundEnabled,
@@ -214,6 +224,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
 
   // Tab đang chọn trong Dashboard: null (màn hình 6 Widgets) hoặc 'idle_screen' | 'capture_settings' | 'analytics' | 'storage' | 'security' | 'booth_config'
   const [activeTab, setActiveTab] = useState<AdminTab | null>(initialTab ?? null);
+
+  // Hiệu ứng đổi chữ tạm thời trên nút "Ẩn Ngay" sau khi bấm, cho Admin biết đã bấm trúng
+  const [hideJustClicked, setHideJustClicked] = useState<boolean>(false);
 
   // Danh sách ảnh/video đã lưu trên đám mây (Cloudflare R2, qua Worker) — dùng để xem & dọn dẹp
   // thủ công trong tab Quản Lý Ảnh & Bộ Nhớ. Chỉ tải khi mở đúng tab này, tránh gọi mạng thừa.
@@ -366,6 +379,19 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
       }
     }
   }, [isOpen, eventConfig]);
+
+  // Ảnh đang bị ẩn khỏi Thư Viện của khách (chụp trước mốc phiên hiện tại, chưa được khôi phục) —
+  // hiển thị mới nhất trước trong tab "Lịch Sử Đầy Đủ" để Admin xem lại/khôi phục.
+  // Lưu ý: hook này phải đặt TRƯỚC dòng "if (!isOpen) return null;" bên dưới — nếu đặt sau, hook sẽ bị
+  // gọi có điều kiện (chỉ khi isOpen true) và gây lỗi React "Rendered more hooks than during the
+  // previous render" mỗi khi mở/đóng modal.
+  const hiddenPhotos = React.useMemo(
+    () =>
+      capturedPhotos
+        .filter((p) => !p.forceVisible && p.timestamp < gallerySessionStartedAt)
+        .sort((a, b) => b.timestamp - a.timestamp),
+    [capturedPhotos, gallerySessionStartedAt]
+  );
 
   if (!isOpen) return null;
 
@@ -1312,32 +1338,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <h4 className="text-sm font-black uppercase tracking-wider text-neutral-900">
                       Chế Độ Vận Hành Máy
                     </h4>
-                    <p className="text-[11px] text-neutral-500 mt-0.5">
-                      Chọn đúng 1 trong 3 chế độ — quyết định vị trí góc phải trên màn hình chụp (In Nhanh / Đồng hồ / Trống) và luồng sau khi chụp xong.
-                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {(
                       [
-                        {
-                          key: 'event' as const,
-                          label: 'Chế Độ Sự Kiện',
-                          desc: 'Khách đông, mỗi nhóm chụp 1 lượt. Có nút "In Nhanh" lấy thẳng ảnh vào hậu kỳ, bỏ qua Thư Viện.',
-                          color: 'rose',
-                        },
-                        {
-                          key: 'photobooth' as const,
-                          label: 'Photobooth / Mua Giờ',
-                          desc: 'Khách thuê máy theo phiên có giới hạn thời gian, hiện đồng hồ đếm ngược góc trên.',
-                          color: 'blue',
-                        },
-                        {
-                          key: 'free' as const,
-                          label: 'Chụp Tự Do',
-                          desc: 'Dành cho test hoặc khách thuê máy thời lượng lớn, không giới hạn thời gian.',
-                          color: 'purple',
-                        },
+                        { key: 'event' as const, label: 'Chế Độ Sự Kiện', color: 'rose' },
+                        { key: 'photobooth' as const, label: 'Photobooth / Mua Giờ', color: 'blue' },
+                        { key: 'free' as const, label: 'Chụp Tự Do', color: 'purple' },
                       ]
                     ).map((mode) => {
                       const isSelected = (tempConfig.captureMode || 'photobooth') === mode.key;
@@ -1362,10 +1370,34 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             </span>
                             {isSelected && <Check className="w-4 h-4 text-neutral-900" />}
                           </div>
-                          <p className="text-[10.5px] text-neutral-500 leading-snug">{mode.desc}</p>
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Ẩn thủ công — Admin chủ động bấm để ẩn ngay toàn bộ ảnh cũ khỏi Thư Viện (bảo
+                      mật cho khách trước), không cần chờ đổi tiêu đề sự kiện hay hết phiên Photobooth.
+                      Ảnh cũ không bị xóa — vẫn xem/khôi phục lại được ở tab "Lịch Sử Đầy Đủ". */}
+                  <div className="pt-3 border-t border-neutral-100 flex items-center justify-between gap-3">
+                    <div>
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                        Ẩn Ảnh Cũ Thủ Công
+                      </h5>
+                      <p className="text-[10.5px] text-neutral-500 mt-0.5">
+                        Ảnh cũ vẫn còn nguyên, xem/khôi phục lại ở tab "Lịch Sử Đầy Đủ".
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onHideGalleryNow();
+                        setHideJustClicked(true);
+                        window.setTimeout(() => setHideJustClicked(false), 2000);
+                      }}
+                      className="shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer bg-neutral-900 text-white border-neutral-900 hover:bg-neutral-700"
+                    >
+                      {hideJustClicked ? 'Đã Ẩn ✓' : 'Ẩn Ngay'}
+                    </button>
                   </div>
 
                   {/* Thời lượng phiên — chỉ hiện khi đang chọn Photobooth / Mua Giờ */}
@@ -1778,6 +1810,59 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-bold flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       <span>Đã tải file ZIP về thư mục Downloads của máy tính thành công!</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Khối Lịch Sử Đầy Đủ — ảnh bị ẩn khỏi Thư Viện khách (theo phiên Photobooth, đổi
+                    tiêu đề sự kiện, hoặc nút "Ẩn Ngay" thủ công) vẫn còn nguyên ở đây, không mất —
+                    Admin xem lại & khôi phục từng ảnh về Thư Viện nếu cần. */}
+                <div className="p-4 bg-white rounded-2xl border border-amber-200 shadow-xs flex flex-col gap-3.5 bg-amber-50/20">
+                  <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4 text-amber-600" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950">
+                        Lịch Sử Đầy Đủ — Ảnh Đã Ẩn
+                      </h4>
+                    </div>
+                    <span className="text-xs font-bold text-amber-700 font-mono">
+                      {hiddenPhotos.length} Ảnh Đang Ẩn
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-neutral-600">
+                    Ảnh chụp trước lần ẩn gần nhất không còn hiện trong Thư Viện của khách (bảo mật
+                    cho khách trước), nhưng vẫn còn nguyên ở đây. Bấm "Khôi Phục" để đưa 1 ảnh trở
+                    lại Thư Viện hiện tại.
+                  </p>
+
+                  {hiddenPhotos.length === 0 ? (
+                    <p className="text-xs text-neutral-400 italic py-2 text-center">
+                      Chưa có ảnh nào bị ẩn.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                      {hiddenPhotos.map((photo) => (
+                        <div
+                          key={photo.id}
+                          className="relative rounded-xl overflow-hidden border border-amber-200 shadow-2xs group"
+                        >
+                          <img
+                            src={photo.dataUrl}
+                            alt="Ảnh đã ẩn"
+                            className="w-full aspect-square object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => onRestorePhoto(photo.id)}
+                            className="absolute inset-x-0 bottom-0 py-1 bg-black/70 hover:bg-emerald-600 text-white text-[9.5px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                            title="Khôi phục ảnh này vào Thư Viện"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Khôi Phục</span>
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

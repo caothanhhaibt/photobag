@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { AppScreen, CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization } from '../types';
-import { FRAME_COLORS, LAYOUT_OPTIONS, FRAME_STYLE_OPTIONS, FILTER_PRESETS } from '../constants/filters';
+import React, { useState, useEffect, useRef } from 'react';
+import { AppScreen, CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker } from '../types';
+import { FRAME_COLORS, LAYOUT_OPTIONS, FRAME_STYLE_OPTIONS, FILTER_PRESETS, STICKER_EMOJIS } from '../constants/filters';
 import { generatePhotostripCanvas, downloadCanvas } from '../utils/canvas';
 import QRCode from 'qrcode';
 import { uploadPhotoToCloud, isCloudStorageConfigured } from '../utils/cloudStorage';
@@ -20,6 +20,8 @@ import {
   AlignCenter,
   AlignRight,
   RefreshCw,
+  Smile,
+  X as XIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -71,6 +73,68 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   const [noteText, setNoteText] = useState<string>('Forever & Always ♡\nLưu giữ từng khoảnh khắc ngọt ngào!');
   const [copied, setCopied] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Sticker (nhãn dán) khách kéo thả lên tờ ảnh xem trước — vị trí/cỡ/góc xoay lưu theo % để vẽ
+  // đúng lại vào canvas in 300 DPI (xem buildStripCanvas). `stripPreviewRef` trỏ tới khung xem trước
+  // thật để quy đổi tọa độ chạm/chuột sang % khi kéo thả.
+  const [placedStickers, setPlacedStickers] = useState<PlacedSticker[]>([]);
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+  const stripPreviewRef = useRef<HTMLDivElement>(null);
+  const draggingStickerRef = useRef<{ id: string; moved: boolean; pointerId: number } | null>(null);
+
+  const handleAddSticker = (emoji: string) => {
+    const newSticker: PlacedSticker = {
+      id: `sticker_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      emoji,
+      xPercent: 50,
+      yPercent: 50,
+      scale: 1,
+      rotation: 0,
+    };
+    setPlacedStickers((prev) => [...prev, newSticker]);
+    setSelectedStickerId(newSticker.id);
+  };
+
+  const handleDeleteSticker = (id: string) => {
+    setPlacedStickers((prev) => prev.filter((s) => s.id !== id));
+    setSelectedStickerId((prev) => (prev === id ? null : prev));
+  };
+
+  const handleUpdateSticker = (id: string, patch: Partial<PlacedSticker>) => {
+    setPlacedStickers((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  };
+
+  // Kéo sticker: chạm/bấm giữ rồi kéo để đổi vị trí; nếu gần như không di chuyển thì coi là chạm để
+  // CHỌN sticker (mở thanh chỉnh cỡ/xoay/xóa) thay vì kéo.
+  const handleStickerPointerDown = (e: React.PointerEvent<HTMLDivElement>, id: string) => {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    draggingStickerRef.current = { id, moved: false, pointerId: e.pointerId };
+  };
+
+  const handleStickerPointerMove = (e: React.PointerEvent<HTMLDivElement>, id: string) => {
+    const dragging = draggingStickerRef.current;
+    if (!dragging || dragging.id !== id || dragging.pointerId !== e.pointerId) return;
+    const container = stripPreviewRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    dragging.moved = true;
+    const xPercent = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+    const yPercent = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
+    handleUpdateSticker(id, { xPercent, yPercent });
+  };
+
+  const handleStickerPointerUp = (e: React.PointerEvent<HTMLDivElement>, id: string) => {
+    const dragging = draggingStickerRef.current;
+    if (dragging && dragging.id === id) {
+      if (!dragging.moved) {
+        // Chạm không kéo -> chọn/bỏ chọn sticker để mở thanh chỉnh cỡ/xoay/xóa
+        setSelectedStickerId((prev) => (prev === id ? null : id));
+      }
+      draggingStickerRef.current = null;
+    }
+  };
 
   // Tải ảnh lên đám mây (Cloudflare R2 qua Worker) để có link tải thật cho mã QR — thay cho mã QR
   // giả trước đây chỉ trỏ về link trang camera, không tải được ảnh nào.
@@ -167,11 +231,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   const isTabletOrLarger = useIsTabletOrLarger();
 
   // Đánh lại số thứ tự các mục biên tập: mục "Bố Cục Ghép" chỉ hiện ở Chế Độ Chụp Tự Do (nên chiếm
-  // số 1 khi có mặt), các mục còn lại dịch số lên tương ứng khi mục đó bị ẩn.
+  // số 1 khi có mặt), các mục còn lại dịch số lên tương ứng khi mục đó bị ẩn. Mục "Tiêu Đề, Ngày In
+  // & Lời Chúc Lưu Bút" đưa lên ngay sau Bố Cục Ghép (nội dung chữ khách gõ xong thấy ngay trên bản
+  // xem trước, nên làm sớm hơn — Kiểu Khung/Màu Giấy là bước tinh chỉnh cuối).
   const showLayoutSection = eventConfig?.captureMode === 'free';
-  const stepFrameStyle = showLayoutSection ? 2 : 1;
+  const stepNote = showLayoutSection ? 2 : 1;
+  const stepFrameStyle = stepNote + 1;
   const stepPaperColor = stepFrameStyle + 1;
-  const stepNote = stepPaperColor + 1;
+  const stepSticker = stepPaperColor + 1;
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : 'https://photobooth.app';
   // Link để chia sẻ/mã QR: ưu tiên link ảnh thật vừa tải lên đám mây, nếu chưa có (đang tải, lỗi,
@@ -196,6 +263,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
       noteText,
       columnAlign,
       slotCustomizations: customList,
+      stickers: placedStickers,
     });
   };
 
@@ -457,6 +525,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         <div className="w-full h-[38vh] sm:h-[42vh] max-h-[350px] min-h-[230px] flex items-center justify-center p-2 sm:p-2.5 overflow-hidden">
           <div
             id="photostrip-share-preview"
+            ref={stripPreviewRef}
             className={`shadow-[0_14px_36px_rgba(0,0,0,0.16)] border transition-all duration-300 rounded-xs relative overflow-hidden flex flex-col justify-between h-full max-h-full ${
               isHorizontalLayout
                 ? 'aspect-[3/2] w-auto max-w-[95%] p-2 sm:p-2.5'
@@ -787,6 +856,39 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 </p>
               </div>
             )}
+
+            {/* LỚP STICKER — luôn vẽ nổi trên cùng dù theme/khung nào, đúng như lúc xuất ảnh in.
+                Chỉ kéo/chọn được ở Chế Độ Biên Tập; ở Xuất Bản chỉ hiện để xem trước, không chỉnh. */}
+            <div className="absolute inset-0 z-20 pointer-events-none">
+              {placedStickers.map((sticker) => (
+                <div
+                  key={sticker.id}
+                  onPointerDown={activeMode === 'edit' ? (e) => handleStickerPointerDown(e, sticker.id) : undefined}
+                  onPointerMove={activeMode === 'edit' ? (e) => handleStickerPointerMove(e, sticker.id) : undefined}
+                  onPointerUp={activeMode === 'edit' ? (e) => handleStickerPointerUp(e, sticker.id) : undefined}
+                  className={`absolute select-none touch-none ${
+                    activeMode === 'edit' ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none'
+                  }`}
+                  style={{
+                    left: `${sticker.xPercent}%`,
+                    top: `${sticker.yPercent}%`,
+                    transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg) scale(${sticker.scale})`,
+                    fontSize: '28px',
+                    lineHeight: 1,
+                  }}
+                >
+                  <span
+                    className={
+                      activeMode === 'edit' && selectedStickerId === sticker.id
+                        ? 'inline-block ring-2 ring-amber-400 ring-offset-2 rounded-full'
+                        : 'inline-block'
+                    }
+                  >
+                    {sticker.emoji}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1022,6 +1124,58 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             </section>
             )}
 
+            {/* KHỐI 6 (ĐƯA LÊN TRƯỚC): TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì
+                nội dung chữ khách tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh
+                chỉnh cuối. */}
+            <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
+                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
+                  </label>
+                  <input
+                    type="text"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    maxLength={40}
+                    placeholder="VD: Jane & Johnny"
+                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                    Ngày Tháng In:
+                  </label>
+                  <input
+                    type="text"
+                    value={dateStr}
+                    onChange={(e) => setDateStr(e.target.value)}
+                    maxLength={20}
+                    placeholder="VD: 1-15-2019"
+                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
+                </label>
+                <textarea
+                  rows={2}
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  maxLength={140}
+                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
+                  className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                />
+              </div>
+            </section>
+
             {/* KHỐI 3: CHỦ ĐỀ & KIỂU KHUNG */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
@@ -1104,54 +1258,113 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
             </section>
 
-            {/* KHỐI 6: TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ */}
+            {/* KHỐI STICKER: NHÃN DÁN TRANG TRÍ — bấm để thêm, chạm-kéo trên tờ ảnh xem trước phía
+                trên để đổi vị trí, chạm 1 cái (không kéo) để chọn rồi chỉnh cỡ/góc xoay/xóa bên dưới. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
-              <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
-                  </label>
-                  <input
-                    type="text"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    maxLength={40}
-                    placeholder="VD: Jane & Johnny"
-                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                  />
+              <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Smile className="w-3.5 h-3.5 text-[#8C7A5B]" />
+                  <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                    {stepSticker}. Sticker Trang Trí
+                  </h3>
                 </div>
-                <div>
-                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Ngày Tháng In:
-                  </label>
-                  <input
-                    type="text"
-                    value={dateStr}
-                    onChange={(e) => setDateStr(e.target.value)}
-                    maxLength={20}
-                    placeholder="VD: 1-15-2019"
-                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                  />
-                </div>
+                {placedStickers.length > 0 && (
+                  <span className="text-[10px] font-mono text-[#8C7A5B] font-bold">
+                    {placedStickers.length} sticker
+                  </span>
+                )}
               </div>
 
-              <div>
-                <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
-                </label>
-                <textarea
-                  rows={2}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  maxLength={140}
-                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
-                  className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                />
+              <p className="text-[10.5px] text-[#1A1A1A]/60 -mt-1">
+                Bấm 1 icon để thêm vào tờ ảnh, rồi chạm-kéo trên bản xem trước phía trên để đổi chỗ.
+              </p>
+
+              <div className="grid grid-cols-8 sm:grid-cols-12 gap-1.5">
+                {STICKER_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleAddSticker(emoji)}
+                    className="aspect-square rounded-xl bg-[#F9F7F2] border border-[#1A1A1A]/15 hover:border-[#1A1A1A]/50 hover:bg-white flex items-center justify-center text-xl transition-all cursor-pointer active:scale-90"
+                    title="Thêm sticker này"
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
+
+              {/* Thanh chỉnh sticker đang chọn — cỡ, góc xoay, xóa */}
+              {(() => {
+                const selected = placedStickers.find((s) => s.id === selectedStickerId);
+                if (!selected) return null;
+                return (
+                  <div className="mt-1 p-3 bg-white/70 rounded-xl border border-[#1A1A1A]/10 flex flex-col gap-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-sans font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                        <span className="text-lg">{selected.emoji}</span>
+                        <span>Đang chỉnh sticker</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSticker(selected.id)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider border border-rose-200 flex items-center gap-1 cursor-pointer"
+                        >
+                          <XIcon className="w-3 h-3" />
+                          <span>Xóa</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStickerId(null)}
+                          className="px-2.5 py-1 rounded-lg bg-[#EFEEE8] hover:bg-[#E5E1D8] text-[#1A1A1A]/70 text-[10px] font-bold uppercase tracking-wider border border-[#1A1A1A]/15 cursor-pointer"
+                        >
+                          Xong
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
+                          Cỡ Sticker
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
+                          {Math.round(selected.scale * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={2.5}
+                        step={0.1}
+                        value={selected.scale}
+                        onChange={(e) => handleUpdateSticker(selected.id, { scale: Number(e.target.value) })}
+                        className="w-full h-1.5 bg-[#1A1A1A]/15 appearance-none cursor-pointer accent-[#8C7A5B] rounded-full"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
+                          Góc Xoay
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
+                          {selected.rotation}°
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={359}
+                        step={5}
+                        value={selected.rotation}
+                        onChange={(e) => handleUpdateSticker(selected.id, { rotation: Number(e.target.value) })}
+                        className="w-full h-1.5 bg-[#1A1A1A]/15 appearance-none cursor-pointer accent-[#8C7A5B] rounded-full"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
 
             {/* NÚT HÀNH ĐỘNG DƯỚI CÙNG TRONG CHẾ ĐỘ BIÊN TẬP — quay lại chụp đã có sẵn ở nút góc trên (TopAppBar) nên chỉ cần 1 nút hành động chính ở đây */}
@@ -1369,6 +1582,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         <div className="w-full h-[38vh] sm:h-[42vh] max-h-[350px] min-h-[230px] flex items-center justify-center p-2 sm:p-2.5 overflow-hidden">
           <div
             id="photostrip-share-preview"
+            ref={stripPreviewRef}
             className={`shadow-[0_14px_36px_rgba(0,0,0,0.16)] border transition-all duration-300 rounded-xs relative overflow-hidden flex flex-col justify-between h-full max-h-full ${
               isHorizontalLayout
                 ? 'aspect-[3/2] w-auto max-w-[95%] p-2 sm:p-2.5'
@@ -1699,6 +1913,39 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 </p>
               </div>
             )}
+
+            {/* LỚP STICKER — luôn vẽ nổi trên cùng dù theme/khung nào, đúng như lúc xuất ảnh in.
+                Chỉ kéo/chọn được ở Chế Độ Biên Tập; ở Xuất Bản chỉ hiện để xem trước, không chỉnh. */}
+            <div className="absolute inset-0 z-20 pointer-events-none">
+              {placedStickers.map((sticker) => (
+                <div
+                  key={sticker.id}
+                  onPointerDown={activeMode === 'edit' ? (e) => handleStickerPointerDown(e, sticker.id) : undefined}
+                  onPointerMove={activeMode === 'edit' ? (e) => handleStickerPointerMove(e, sticker.id) : undefined}
+                  onPointerUp={activeMode === 'edit' ? (e) => handleStickerPointerUp(e, sticker.id) : undefined}
+                  className={`absolute select-none touch-none ${
+                    activeMode === 'edit' ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'pointer-events-none'
+                  }`}
+                  style={{
+                    left: `${sticker.xPercent}%`,
+                    top: `${sticker.yPercent}%`,
+                    transform: `translate(-50%, -50%) rotate(${sticker.rotation}deg) scale(${sticker.scale})`,
+                    fontSize: '28px',
+                    lineHeight: 1,
+                  }}
+                >
+                  <span
+                    className={
+                      activeMode === 'edit' && selectedStickerId === sticker.id
+                        ? 'inline-block ring-2 ring-amber-400 ring-offset-2 rounded-full'
+                        : 'inline-block'
+                    }
+                  >
+                    {sticker.emoji}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1932,6 +2179,58 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             </section>
             )}
 
+            {/* KHỐI 6 (ĐƯA LÊN TRƯỚC): TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì
+                nội dung chữ khách tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh
+                chỉnh cuối. */}
+            <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
+                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
+                  </label>
+                  <input
+                    type="text"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    maxLength={40}
+                    placeholder="VD: Jane & Johnny"
+                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                    Ngày Tháng In:
+                  </label>
+                  <input
+                    type="text"
+                    value={dateStr}
+                    onChange={(e) => setDateStr(e.target.value)}
+                    maxLength={20}
+                    placeholder="VD: 1-15-2019"
+                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
+                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
+                </label>
+                <textarea
+                  rows={2}
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  maxLength={140}
+                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
+                  className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
+                />
+              </div>
+            </section>
+
             {/* KHỐI 3: CHỦ ĐỀ & KIỂU KHUNG */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
@@ -2014,54 +2313,113 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
             </section>
 
-            {/* KHỐI 6: TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ */}
+            {/* KHỐI STICKER: NHÃN DÁN TRANG TRÍ — bấm để thêm, chạm-kéo trên tờ ảnh xem trước phía
+                trên để đổi vị trí, chạm 1 cái (không kéo) để chọn rồi chỉnh cỡ/góc xoay/xóa bên dưới. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
-              <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
-                  </label>
-                  <input
-                    type="text"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    maxLength={40}
-                    placeholder="VD: Jane & Johnny"
-                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                  />
+              <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Smile className="w-3.5 h-3.5 text-[#8C7A5B]" />
+                  <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                    {stepSticker}. Sticker Trang Trí
+                  </h3>
                 </div>
-                <div>
-                  <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Ngày Tháng In:
-                  </label>
-                  <input
-                    type="text"
-                    value={dateStr}
-                    onChange={(e) => setDateStr(e.target.value)}
-                    maxLength={20}
-                    placeholder="VD: 1-15-2019"
-                    className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                  />
-                </div>
+                {placedStickers.length > 0 && (
+                  <span className="text-[10px] font-mono text-[#8C7A5B] font-bold">
+                    {placedStickers.length} sticker
+                  </span>
+                )}
               </div>
 
-              <div>
-                <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
-                </label>
-                <textarea
-                  rows={2}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  maxLength={140}
-                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
-                  className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
-                />
+              <p className="text-[10.5px] text-[#1A1A1A]/60 -mt-1">
+                Bấm 1 icon để thêm vào tờ ảnh, rồi chạm-kéo trên bản xem trước phía trên để đổi chỗ.
+              </p>
+
+              <div className="grid grid-cols-8 sm:grid-cols-12 gap-1.5">
+                {STICKER_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleAddSticker(emoji)}
+                    className="aspect-square rounded-xl bg-[#F9F7F2] border border-[#1A1A1A]/15 hover:border-[#1A1A1A]/50 hover:bg-white flex items-center justify-center text-xl transition-all cursor-pointer active:scale-90"
+                    title="Thêm sticker này"
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
+
+              {/* Thanh chỉnh sticker đang chọn — cỡ, góc xoay, xóa */}
+              {(() => {
+                const selected = placedStickers.find((s) => s.id === selectedStickerId);
+                if (!selected) return null;
+                return (
+                  <div className="mt-1 p-3 bg-white/70 rounded-xl border border-[#1A1A1A]/10 flex flex-col gap-3 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-sans font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                        <span className="text-lg">{selected.emoji}</span>
+                        <span>Đang chỉnh sticker</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSticker(selected.id)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider border border-rose-200 flex items-center gap-1 cursor-pointer"
+                        >
+                          <XIcon className="w-3 h-3" />
+                          <span>Xóa</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStickerId(null)}
+                          className="px-2.5 py-1 rounded-lg bg-[#EFEEE8] hover:bg-[#E5E1D8] text-[#1A1A1A]/70 text-[10px] font-bold uppercase tracking-wider border border-[#1A1A1A]/15 cursor-pointer"
+                        >
+                          Xong
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
+                          Cỡ Sticker
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
+                          {Math.round(selected.scale * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={2.5}
+                        step={0.1}
+                        value={selected.scale}
+                        onChange={(e) => handleUpdateSticker(selected.id, { scale: Number(e.target.value) })}
+                        className="w-full h-1.5 bg-[#1A1A1A]/15 appearance-none cursor-pointer accent-[#8C7A5B] rounded-full"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
+                          Góc Xoay
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
+                          {selected.rotation}°
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={359}
+                        step={5}
+                        value={selected.rotation}
+                        onChange={(e) => handleUpdateSticker(selected.id, { rotation: Number(e.target.value) })}
+                        className="w-full h-1.5 bg-[#1A1A1A]/15 appearance-none cursor-pointer accent-[#8C7A5B] rounded-full"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
 
             {/* NÚT HÀNH ĐỘNG DƯỚI CÙNG TRONG CHẾ ĐỘ BIÊN TẬP — quay lại chụp đã có sẵn ở nút góc trên (TopAppBar) nên chỉ cần 1 nút hành động chính ở đây */}

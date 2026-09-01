@@ -261,21 +261,22 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
           whileTap={{ scale: 0.9 }}
           whileHover={{ scale: 1.05 }}
           className="pointer-events-auto relative flex flex-col items-center justify-center focus:outline-hidden select-none cursor-pointer group"
-          aria-label="Chụp Ảnh"
+          aria-label="Bắt Đầu"
         >
           {/* Vòng ngoài kép Shutter Ring */}
           <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-[#F9F7F2] border-2 border-[#1A1A1A] ring-4 ring-[#8C7A5B]/35 shadow-[0_8px_25px_rgba(0,0,0,0.25)] flex items-center justify-center transition-all duration-200 group-hover:ring-[#2563EB]/40 group-hover:border-[#2563EB]">
-            {/* Đĩa lõi màn trập */}
+            {/* Đĩa lõi màn trập — icon "play" thể hiện đúng ý nghĩa "bắt đầu" (khởi động phiên/đồng
+                hồ) thay vì "chụp ảnh" (việc chụp thật sự diễn ra ở màn Camera sau đó). */}
             <div className="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-[#1A1A1A] group-hover:bg-[#2563EB] text-[#F9F7F2] flex items-center justify-center shadow-inner transition-colors duration-200">
               <span className="material-symbols-outlined text-[24px] sm:text-[28px] transition-transform duration-200 group-hover:scale-110">
-                photo_camera
+                play_circle
               </span>
             </div>
           </div>
 
-          {/* Nhãn chữ nổi CHỤP ẢNH */}
+          {/* Nhãn chữ nổi BẮT ĐẦU */}
           <span className="mt-1 text-[9px] sm:text-[10px] font-sans uppercase tracking-[0.2em] whitespace-nowrap px-2.5 py-0.5 rounded-full bg-[#1A1A1A] text-[#F9F7F2] font-bold shadow-xs group-hover:bg-[#2563EB] transition-colors">
-            CHỤP ẢNH
+            BẮT ĐẦU
           </span>
         </motion.button>
       </div>
