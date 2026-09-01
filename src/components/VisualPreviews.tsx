@@ -13,6 +13,13 @@ import {
   BookOpen,
   Skull,
   AlignLeft,
+  Tag,
+  PenLine,
+  QrCode,
+  Disc3,
+  Award,
+  TrainFront,
+  Barcode,
 } from 'lucide-react';
 
 interface LayoutIllustrationProps {
@@ -588,6 +595,129 @@ export const FrameStyleIllustration: React.FC<FrameStyleIllustrationProps> = ({
             <div className="w-4 h-4 rounded-full bg-red-600 border border-white flex items-center justify-center">
               <div className="w-1 h-1 bg-white rounded-full" />
             </div>
+          </div>
+        </div>
+      );
+
+    // 9. NHÃN DINH DƯỠNG KỶ NIỆM (NUTRITION LABEL)
+    case 'nutrition-label':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-white border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-[#1A1A1A]'} p-1.5 flex flex-col gap-0.5 relative overflow-hidden`}>
+          <div className="text-center font-sans text-[9px] font-black tracking-tight text-[#1A1A1A] border-b-2 border-[#1A1A1A] pb-0.5">
+            NHÃN DINH DƯỠNG
+          </div>
+          <div className="flex items-center justify-between text-[5.5px] font-mono text-[#1A1A1A] border-b border-[#1A1A1A]/40 pb-0.5">
+            <span>KHẨU PHẦN: 1 KỶ NIỆM</span>
+            <Tag className="w-2.5 h-2.5" />
+          </div>
+          <div className="flex-1 flex flex-col gap-0.3 justify-center text-[5px] font-mono text-[#1A1A1A]">
+            <div className="flex justify-between border-b border-dotted border-[#1A1A1A]/40"><span>Tình Yêu</span><span>100%</span></div>
+            <div className="flex justify-between border-b border-dotted border-[#1A1A1A]/40"><span>Niềm Tin</span><span>100%</span></div>
+            <div className="flex justify-between border-b border-dotted border-[#1A1A1A]/40"><span>Hạnh Phúc</span><span>100%</span></div>
+          </div>
+          <Barcode className="w-full h-3.5 text-[#1A1A1A]" />
+        </div>
+      );
+
+    // 10. SỔ LƯU NIỆM CẮT DÁN (SCRAPBOOK)
+    case 'scrapbook':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-[#EFE7D8] border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-[#8C7A5B]/40'} p-1.5 flex flex-col justify-between relative overflow-hidden`}>
+          {/* Washi tape corners */}
+          <div className="absolute -top-1 left-2 w-6 h-2.5 bg-amber-300/70 -rotate-6 rounded-2xs" />
+          <div className="absolute -top-1 right-2 w-6 h-2.5 bg-rose-300/70 rotate-6 rounded-2xs" />
+          <div className="w-full h-12 bg-[#E4D9C4] border border-[#8C7A5B]/50 rounded-xs flex items-center justify-center shadow-inner mt-2">
+            <Camera className="w-4 h-4 text-[#8C7A5B]/60" />
+          </div>
+          <div className="flex items-center justify-between px-0.5">
+            <PenLine className="w-2.5 h-2.5 text-[#3A332A]/60" />
+            <span className="text-[7px] font-serif italic text-[#3A332A] tracking-tight -rotate-2">ghi chú tay ♡</span>
+          </div>
+        </div>
+      );
+
+    // 11. VÉ CONCERT / BOOKMARK (K-POP)
+    case 'concert-ticket':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-gradient-to-b from-[#1A1A2E] to-[#2D1B4E] border-2 ${isSelected ? 'border-amber-400 shadow-md ring-2 ring-amber-400/30' : 'border-[#F5D67B]/30'} p-1.5 flex flex-col justify-between relative overflow-hidden`}>
+          {/* Perforated left edge */}
+          <div className="absolute left-0 top-0 h-full flex flex-col justify-around py-1">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="w-1.5 h-1.5 -ml-0.75 rounded-full bg-[#F9F7F2]" />
+            ))}
+          </div>
+          <div className="text-center text-[6px] font-bold tracking-[0.2em] text-[#F5D67B] ml-1.5">ADMIT ONE • VIP</div>
+          <div className="w-full h-9 bg-black/30 border border-[#F5D67B]/30 rounded-xs flex items-center justify-center ml-1.5">
+            <Camera className="w-3.5 h-3.5 text-[#F5D67B]/60" />
+          </div>
+          <div className="flex items-center justify-between ml-1.5 text-[5px] font-mono text-[#F5D67B]/80">
+            <span>01. INTRO 02. MEMORY</span>
+          </div>
+          <div className="flex items-center justify-between ml-1.5">
+            <span className="text-[5px] font-mono text-[#F5D67B]/60">TRACK 01</span>
+            <QrCode className="w-3.5 h-3.5 text-[#F5D67B]" />
+          </div>
+        </div>
+      );
+
+    // 12. THIỆP GẤP ĐĨA NHẠC (VINYL FOLD CARD)
+    case 'vinyl-foldcard':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-[#2B2623] text-[#F3ECE4] border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-neutral-800'} p-1.5 flex relative overflow-hidden`}>
+          <div className="w-1/2 h-full flex flex-col items-center justify-center gap-1 pr-1.5">
+            <Disc3 className="w-8 h-8 text-amber-200/80" />
+            <span className="text-[5px] font-mono text-neutral-400">SIDE A</span>
+          </div>
+          {/* Dashed fold line */}
+          <div className="w-0 border-l border-dashed border-amber-300/50 relative">
+            <Scissors className="w-2.5 h-2.5 text-amber-300/70 absolute top-1/2 -left-1.2 -translate-y-1/2 rotate-90" />
+          </div>
+          <div className="w-1/2 h-full flex flex-col items-center justify-center gap-1 pl-1.5">
+            <div className="w-full h-10 bg-[#3A322E] border border-[#524641] rounded-xs flex items-center justify-center">
+              <Camera className="w-3.5 h-3.5 text-neutral-500" />
+            </div>
+            <span className="text-[5px] font-mono text-neutral-400">GẤP ĐÔI TẠI ĐÂY</span>
+          </div>
+        </div>
+      );
+
+    // 13. THIỆP GẤP THƯƠNG HIỆU (BRANDED FOLD CARD)
+    case 'branded-foldcard':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-[#1A1A1A] text-white border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-neutral-800'} p-1.5 flex relative overflow-hidden`}>
+          <div className="w-1/2 h-full flex flex-col items-center justify-center gap-1 pr-1.5">
+            <Award className="w-5 h-5 text-amber-300" />
+            <span className="text-[6px] font-serif font-bold tracking-widest text-center leading-tight">SOCIAL CLUB</span>
+          </div>
+          <div className="w-0 border-l border-dashed border-white/30 relative">
+            <Scissors className="w-2.5 h-2.5 text-white/60 absolute top-1/2 -left-1.2 -translate-y-1/2 rotate-90" />
+          </div>
+          <div className="w-1/2 h-full flex items-center justify-center pl-1.5">
+            <div className="w-full h-13 bg-white text-neutral-700 border border-neutral-300 rounded-xs flex items-center justify-center shadow-sm">
+              <Camera className="w-4 h-4 text-neutral-400" />
+            </div>
+          </div>
+        </div>
+      );
+
+    // 14. VÉ TÀU KỶ NIỆM (TRAIN TICKET)
+    case 'train-ticket':
+      return (
+        <div className={`w-full h-24 rounded-lg bg-[#F5F0E4] border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-[#8C7A5B]/40'} p-1.5 flex flex-col justify-between relative overflow-hidden`}>
+          {/* Scalloped notches top & bottom */}
+          <div className="absolute -top-1 left-0 w-full flex justify-around">
+            {[1, 2, 3, 4, 5].map((i) => <div key={i} className="w-2 h-2 rounded-full bg-white border border-[#8C7A5B]/30" />)}
+          </div>
+          <div className="flex items-center justify-between text-[5.5px] font-mono text-[#4A3A24] mt-1.5">
+            <TrainFront className="w-3 h-3" />
+            <span className="font-bold tracking-wider">GA KỶ NIỆM → GA HẠNH PHÚC</span>
+          </div>
+          <div className="w-full h-9 border-2 border-dashed border-[#8C7A5B]/50 rounded-xs flex items-center justify-center bg-white/40">
+            <Camera className="w-3.5 h-3.5 text-[#8C7A5B]/50" />
+          </div>
+          <div className="flex items-center justify-between text-[5px] font-mono text-[#4A3A24]/70">
+            <span>GHẾ: A-01 • TOA: 01</span>
+            <span className="font-bold">VÉ KỶ NIỆM</span>
           </div>
         </div>
       );
