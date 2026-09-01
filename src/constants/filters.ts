@@ -621,3 +621,12 @@ export const FRAME_STYLE_OPTIONS: FrameStyleOption[] = [
     icon: 'train-front',
   },
 ];
+
+// Bộ sticker (nhãn dán) cho khách kéo thả trang trí lên tờ ảnh ở màn Biên Tập — dùng emoji thay vì
+// ảnh PNG rời để không phụ thuộc mạng/tải file, vừa hiển thị trên màn hình vừa vẽ lại được thẳng
+// vào canvas in 300 DPI (ctx.fillText) mà không mất chất lượng dù phóng to.
+export const STICKER_EMOJIS: string[] = [
+  '❤️', '💕', '⭐', '✨', '🎉', '🎊', '🎈', '👑',
+  '😂', '😍', '😎', '🥳', '😘', '🤍', '🌸', '🌈',
+  '🔥', '💯', '👍', '🙌', '💋', '🎀', '🍰', '📸',
+];
