@@ -503,6 +503,14 @@ export default function App() {
     setIsBackgroundDrawerOpen((prev) => !prev);
   };
 
+  // Gán 1 lượt chụp (nhóm ảnh) từ Thư Viện làm nguồn cho màn Chia Sẻ, để khách có thể
+  // quay lại ghép dải ảnh từ 1 lượt chụp cũ hơn thay vì chỉ lượt gần nhất.
+  const handleUseSessionForShare = React.useCallback((photos: CapturedPhoto[]) => {
+    resetActivity();
+    setRecentSessionPhotos(photos);
+    setRecentSessionVideoUrl(null);
+  }, [resetActivity]);
+
   // Đồng bộ sessionMode khi chọn bố cục
   const handleSelectLayout = (layoutId: StripLayout) => {
     setSelectedLayout(layoutId);
@@ -640,8 +648,7 @@ export default function App() {
                 capturedPhotos={capturedPhotos}
                 onDeletePhoto={handleDeletePhoto}
                 onSelectPhotoForFilter={setActivePhoto}
-                currentFilterId={currentFilterId}
-                currentFilterIntensity={currentFilterIntensity}
+                onUseSessionForShare={handleUseSessionForShare}
               />
             </div>
           )}
@@ -729,6 +736,7 @@ export default function App() {
         phonePairingStatus={phoneCameraPairing.status}
         phonePairingCode={phoneCameraPairing.pairingCode}
         phonePairingError={phoneCameraPairing.errorMessage}
+        phonePairingDeviceLabel={phoneCameraPairing.connectedDeviceLabel}
         onStartPhonePairing={phoneCameraPairing.startPairing}
         onStopPhonePairing={phoneCameraPairing.stopPairing}
       />
