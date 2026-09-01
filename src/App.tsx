@@ -21,6 +21,7 @@ import { usePhoneCameraPairing } from './hooks/usePhoneCameraPairing';
 const STORAGE_KEY = 'photobooth_photos_v1';
 const EVENT_CONFIG_KEY = 'photobooth_event_config_v1';
 const ANALYTICS_KEY = 'photobooth_analytics_v1';
+const GALLERY_SESSION_KEY = 'photobooth_gallery_session_v1';
 
 const DEFAULT_ANALYTICS: AnalyticsStats = {
   totalSessions: 18,
@@ -112,8 +113,16 @@ export default function App() {
     return DEFAULT_ANALYTICS;
   });
 
-  // Lưu cấu hình sự kiện
+  // Lưu cấu hình sự kiện — đổi tiêu đề sự kiện (tên sự kiện / tên nhân vật chính) ở chế độ Sự Kiện
+  // hoặc Chụp Tự Do coi như bắt đầu "sự kiện mới": tự động ẩn ảnh cũ khỏi Thư Viện (bảo mật). Riêng
+  // Photobooth có mốc phiên riêng theo đồng hồ (xem handleStartCaptureFromLayout) nên bỏ qua ở đây.
   const handleUpdateEventConfig = (newConfig: EventConfig) => {
+    const titleChanged =
+      newConfig.eventName !== eventConfig.eventName ||
+      newConfig.eventMainSubject !== eventConfig.eventMainSubject;
+    if (titleChanged && (newConfig.captureMode === 'event' || newConfig.captureMode === 'free')) {
+      handleHideGalleryNow();
+    }
     setEventConfig(newConfig);
     try {
       localStorage.setItem(EVENT_CONFIG_KEY, JSON.stringify(newConfig));
@@ -160,8 +169,10 @@ export default function App() {
     setActivePhoto(null);
     setRecentSessionPhotos([]);
     setRecentSessionVideoUrl(null);
+    setGallerySessionStartedAt(0);
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(GALLERY_SESSION_KEY);
     } catch {}
   };
 
@@ -255,6 +266,46 @@ export default function App() {
 
   const [activePhoto, setActivePhoto] = useState<CapturedPhoto | null>(capturedPhotos[0] || null);
   const [recentSessionPhotos, setRecentSessionPhotos] = useState<CapturedPhoto[]>([capturedPhotos[0]]);
+
+  // Mốc "phiên hiện tại" cho việc ẨN ẢNH CŨ khỏi Thư Viện (bảo mật cho khách trước) — ảnh chụp
+  // TRƯỚC mốc này bị ẩn khỏi các màn khách thường thấy, nhưng KHÔNG bị xóa, vẫn còn nguyên trong bộ
+  // nhớ máy và Admin luôn xem/khôi phục lại được qua mục "Lịch Sử Đầy Đủ". 0 = chưa từng ẩn gì.
+  const [gallerySessionStartedAt, setGallerySessionStartedAt] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(GALLERY_SESSION_KEY);
+      if (saved) return Number(saved) || 0;
+    } catch {
+      // Storage access issue
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GALLERY_SESSION_KEY, String(gallerySessionStartedAt));
+    } catch {
+      // Storage quota or iframe limit
+    }
+  }, [gallerySessionStartedAt]);
+
+  // Ẩn toàn bộ ảnh cũ ngay lập tức — dùng cho: (a) nút thủ công trong Admin, (b) tự động khi bắt
+  // đầu phiên Photobooth mới (xem handleStartCaptureFromLayout), (c) tự động khi đổi tiêu đề sự
+  // kiện ở chế độ Sự Kiện/Chụp Tự Do (xem handleUpdateEventConfig).
+  const handleHideGalleryNow = React.useCallback(() => {
+    setGallerySessionStartedAt(Date.now());
+  }, []);
+
+  // Khôi phục lại 1 ảnh cũ cụ thể vào Thư Viện — dùng trong Admin, mục Lịch Sử Đầy Đủ.
+  const handleRestorePhoto = React.useCallback((id: string) => {
+    setCapturedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, forceVisible: true } : p)));
+  }, []);
+
+  // Danh sách ảnh mà khách thường (Thư Viện, Chia Sẻ) được phép thấy — lọc bớt ảnh cũ theo mốc
+  // phiên ở trên. Admin vẫn dùng `capturedPhotos` gốc (đầy đủ, không lọc) cho mục Lịch Sử Đầy Đủ.
+  const visibleCapturedPhotos = React.useMemo(
+    () => capturedPhotos.filter((p) => p.forceVisible || p.timestamp >= gallerySessionStartedAt),
+    [capturedPhotos, gallerySessionStartedAt]
+  );
   const [currentFilterId, setCurrentFilterId] = useState<string>('original');
   const [currentFilterIntensity, setCurrentFilterIntensity] = useState<number>(0);
 
@@ -540,13 +591,10 @@ export default function App() {
   // Bắt đầu phiên chụp từ Màn hình chờ, theo 1 trong 3 chế độ chụp:
   // - 'free' (Chụp Tự Do): Vào thẳng máy ảnh, tự do chụp không giới hạn, sau đó qua Thư Viện tự chọn ảnh.
   // - 'event' / 'photobooth': Vào màn hình Chọn Bố Cục trước như thường lệ.
-  //   Riêng 'photobooth' (Mua Giờ) còn khởi động luôn đồng hồ đếm ngược thời lượng thuê máy.
+  //   Riêng 'photobooth' (Mua Giờ) chỉ thực sự khởi động đồng hồ đếm ngược khi khách bấm nút tròn
+  //   "Bắt Đầu" ở màn Chọn Bố Cục (xem handleStartCaptureFromLayout), không phải ngay khi rời màn chờ.
   const handleStartFromIdle = () => {
     resetActivity();
-    if (eventConfig.captureMode === 'photobooth') {
-      photoboothSessionStartRef.current = Date.now();
-      setPhotoboothRemainingSeconds(eventConfig.photoboothSessionDurationSeconds ?? 300);
-    }
     if (eventConfig.captureMode === 'free') {
       setCurrentScreen('camera');
     } else {
@@ -554,7 +602,9 @@ export default function App() {
     }
   };
 
-  // Bắt đầu chụp ảnh sau khi chọn bố cục
+  // Bắt đầu chụp ảnh sau khi chọn bố cục — đây cũng là mốc "phiên mới" cho chế độ Photobooth: vừa
+  // khởi động đồng hồ đếm ngược thời lượng thuê máy, vừa đặt lại mốc ẩn ảnh (khách mới không thấy
+  // ảnh của khách trước nữa), theo đúng lúc khách thực sự bấm bắt đầu chứ không phải lúc rời màn chờ.
   const handleStartCaptureFromLayout = (layoutId: StripLayout) => {
     resetActivity();
     setSelectedLayout(layoutId);
@@ -567,6 +617,11 @@ export default function App() {
       } else {
         setSessionMode('strip-4');
       }
+    }
+    if (eventConfig.captureMode === 'photobooth') {
+      photoboothSessionStartRef.current = Date.now();
+      setPhotoboothRemainingSeconds(eventConfig.photoboothSessionDurationSeconds ?? 300);
+      handleHideGalleryNow();
     }
     setCurrentScreen('camera');
   };
@@ -633,7 +688,7 @@ export default function App() {
           onResetSamples={handleResetSamples}
           isLiveStream={isLiveStream}
           onToggleLiveStream={() => setIsLiveStream(!isLiveStream)}
-          capturedPhotos={capturedPhotos}
+          capturedPhotos={visibleCapturedPhotos}
           flashEnabled={flashEnabled}
           onToggleFlash={handleToggleFlash}
           gridVisible={gridVisible}
@@ -737,7 +792,7 @@ export default function App() {
             <div className="w-full h-full pt-14 sm:pt-16 pb-6 sm:pb-8 overflow-y-auto overflow-x-hidden overscroll-contain">
               <GalleryScreen
                 onNavigate={handleNavigate}
-                capturedPhotos={capturedPhotos}
+                capturedPhotos={visibleCapturedPhotos}
                 onDeletePhoto={handleDeletePhoto}
                 selectedLayout={selectedLayout}
                 onConfirmSelection={handleUseSessionForShare}
@@ -751,8 +806,8 @@ export default function App() {
             <div className="w-full h-full pt-14 sm:pt-16 overflow-hidden">
               <ShareScreen
                 onNavigate={handleNavigate}
-                capturedPhotos={recentSessionPhotos.length > 0 ? recentSessionPhotos : capturedPhotos}
-                allLibraryPhotos={capturedPhotos}
+                capturedPhotos={recentSessionPhotos.length > 0 ? recentSessionPhotos : visibleCapturedPhotos}
+                allLibraryPhotos={visibleCapturedPhotos}
                 currentFilterId={currentFilterId}
                 currentFilterIntensity={currentFilterIntensity}
                 initialLayout={selectedLayout}
@@ -814,6 +869,9 @@ export default function App() {
         onUpdateEventConfig={handleUpdateEventConfig}
         capturedPhotos={capturedPhotos}
         onResetPhotos={handleResetAllPhotos}
+        gallerySessionStartedAt={gallerySessionStartedAt}
+        onHideGalleryNow={handleHideGalleryNow}
+        onRestorePhoto={handleRestorePhoto}
         analyticsStats={analyticsStats}
         onResetAnalytics={handleResetAnalytics}
         soundEnabled={soundEnabled}

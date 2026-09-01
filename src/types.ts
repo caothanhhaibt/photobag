@@ -90,6 +90,10 @@ export interface CapturedPhoto {
   height?: number;
   label?: string;
   publicConsent?: boolean;
+  // Ảnh cũ (chụp trước mốc "phiên hiện tại") mặc định bị ẩn khỏi Thư Viện để bảo mật cho khách
+  // trước — nhưng nếu Admin chọn "Khôi Phục" trong mục Lịch Sử Đầy Đủ thì ảnh này luôn hiện lại,
+  // bất kể mốc phiên là gì.
+  forceVisible?: boolean;
 }
 
 export type StripLayout =
@@ -123,6 +127,18 @@ export interface SlotCustomization {
   flipH: boolean;
   filterId?: string;
   filterIntensity?: number;
+}
+
+// Một sticker (nhãn dán) được khách kéo thả lên tờ ảnh xem trước — vị trí/cỡ/góc xoay lưu theo
+// TỈ LỆ PHẦN TRĂM (0-100) so với khung xem trước, để vẽ đúng lại vào canvas in 300 DPI dù kích
+// thước hiển thị trên màn hình và trên canvas xuất ra khác nhau.
+export interface PlacedSticker {
+  id: string;
+  emoji: string;
+  xPercent: number; // Tâm sticker, 0-100 theo chiều ngang khung xem trước
+  yPercent: number; // Tâm sticker, 0-100 theo chiều dọc khung xem trước
+  scale: number; // 1 = cỡ mặc định
+  rotation: number; // độ, 0-360
 }
 
 export type FrameStyle =
