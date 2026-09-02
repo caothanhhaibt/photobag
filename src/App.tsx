@@ -460,42 +460,6 @@ export default function App() {
     setRecentSessionPhotos((prev) => prev.filter((p) => p.id !== id));
   }, [resetActivity]);
 
-  // Reset sample photos
-  const handleResetSamples = React.useCallback(() => {
-    const fresh: CapturedPhoto[] = [
-      {
-        id: 'photo_seed_1',
-        dataUrl: SAMPLE_PHOTO_FRIENDS,
-        timestamp: Date.now(),
-        filterId: 'bw',
-        filterIntensity: 85,
-        label: 'Studio Friends 1',
-        publicConsent: true,
-      },
-      {
-        id: 'photo_seed_2',
-        dataUrl: SAMPLE_PHOTO_SOLO,
-        timestamp: Date.now(),
-        filterId: 'kodak-portra',
-        filterIntensity: 75,
-        label: 'Solo Portrait',
-        publicConsent: true,
-      },
-      {
-        id: 'photo_seed_3',
-        dataUrl: SAMPLE_PHOTO_DUO,
-        timestamp: Date.now(),
-        filterId: 'cine',
-        filterIntensity: 70,
-        label: 'Studio Duo',
-        publicConsent: true,
-      },
-    ];
-    setCapturedPhotos(fresh);
-    setRecentSessionPhotos(fresh);
-    setActivePhoto(fresh[0]);
-  }, []);
-
   const shutterTriggerRef = React.useRef<(() => void) | null>(null);
 
   const handleRegisterShutter = React.useCallback((triggerFn: () => void) => {
@@ -686,9 +650,6 @@ export default function App() {
           onToggleSound={() => setSoundEnabled(!soundEnabled)}
           recordVideoEnabled={recordVideoEnabled}
           onToggleRecordVideo={handleToggleRecordVideo}
-          onResetSamples={handleResetSamples}
-          isLiveStream={isLiveStream}
-          onToggleLiveStream={() => setIsLiveStream(!isLiveStream)}
           capturedPhotos={visibleCapturedPhotos}
           flashEnabled={flashEnabled}
           onToggleFlash={handleToggleFlash}
@@ -702,7 +663,6 @@ export default function App() {
           onSetPreviewMode={setPreviewMode}
           captureTriggerMode={captureTriggerMode}
           onSetCaptureTriggerMode={setCaptureTriggerMode}
-          onFlipCamera={handleFlipCamera}
           currentFilterId={currentFilterId}
           currentFilterIntensity={currentFilterIntensity}
           onSelectFilter={handleSelectFilter}
@@ -890,6 +850,8 @@ export default function App() {
         onSetPreviewMode={setPreviewMode}
         selectedCameraId={selectedCameraId}
         onSelectCameraId={setSelectedCameraId}
+        cameraFacing={cameraFacing}
+        onFlipCamera={handleFlipCamera}
         phonePairingStatus={phoneCameraPairing.status}
         phonePairingCode={phoneCameraPairing.pairingCode}
         phonePairingError={phoneCameraPairing.errorMessage}
