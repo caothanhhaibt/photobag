@@ -49,18 +49,31 @@ export interface CloudStorageConfig {
   uploadToken?: string; // Mã bí mật xác thực với Worker (phải khớp với UPLOAD_TOKEN đã đặt trên Worker)
 }
 
+// 1 bánh xe màu kiểu Blackmagic/DaVinci Resolve ("Color Wheel") cho ĐÚNG 1 vùng tông (tối/trung/
+// sáng) — x/y là vị trí kéo tâm bánh xe trong hình tròn bán kính 1 (0,0 = giữa = không đẩy màu),
+// góc quyết định màu ngả (vd kéo sang phải = ấm/cam, sang trái = lạnh/xanh), khoảng cách tới tâm
+// quyết định độ mạnh. luminance là thanh trượt riêng chỉnh độ sáng CHỈ của vùng tông này (khác với
+// x/y chỉ đổi màu, không đổi sáng) — xem applyColorWheelGrading (utils/canvas.ts) để biết công thức
+// áp dụng thật lên từng điểm ảnh.
+export interface ColorWheelValue {
+  x: number; // -1..1
+  y: number; // -1..1
+  luminance: number; // -50..50
+}
+
 // Lớp "Cân Chỉnh Camera Gốc" do Admin cấu hình 1 lần cho đúng ánh sáng/camera của buổi chụp — áp
 // dụng NGẦM lên MỌI ảnh chụp ra, trước cả khi tới phong cách lọc màu khách tự chọn (FilterPreset ở
 // dưới). Ví dụ: đèn vàng yếu thì tăng sáng + đẩy tông lạnh lại cho cân; camera điện thoại ám hồng
 // thì giảm bão hòa lại... — chỉnh đúng 1 lần, mọi phong cách lọc phía trên đều đẹp hơn theo.
-// Các giá trị brightness/contrast/saturation/warmth là ĐỘ LỆCH so với gốc (0 = giữ nguyên, dùng
-// cộng vào 100% khi build chuỗi CSS filter), skinSmooth/sharpen là % cường độ (0-100).
+// Dùng 3 bánh xe màu tách riêng theo vùng tông (kiểu Blackmagic/DaVinci Resolve/Lightroom "Color
+// Grading") thay vì 4 thanh trượt tổng (sáng/tương phản/bão hòa/ấm-lạnh) trước đây — cho phép vd
+// giữ vùng tối trung tính nhưng đẩy vùng sáng ấm hơn để da mặt hồng hào mà không ám vàng cả ảnh.
+// skinSmooth/sharpen vẫn là % cường độ áp CHUNG cho toàn ảnh (0-100), không tách theo vùng tông.
 export interface CameraCalibrationConfig {
   presetId: 'natural' | 'warm-skin' | 'vivid-studio' | 'soft-light' | 'custom';
-  brightness: number; // -50..50
-  contrast: number; // -50..50
-  saturation: number; // -50..50
-  warmth: number; // -50..50 (dương = ấm/vàng cam hơn, âm = lạnh/xanh hơn)
+  shadows: ColorWheelValue; // Vùng Tối
+  midtones: ColorWheelValue; // Vùng Trung
+  highlights: ColorWheelValue; // Vùng Sáng
   skinSmooth: number; // 0-100 — làm mịn nhẹ toàn ảnh rồi trộn % với ảnh gốc (không nhận diện khuôn mặt riêng)
   sharpen: number; // 0-100 — tăng độ nét bù lại cho phần mịn da, chỉ áp lên ảnh đã chụp (không áp cho khung xem trước trực tiếp)
 }
