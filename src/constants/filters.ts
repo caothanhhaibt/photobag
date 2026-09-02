@@ -211,6 +211,50 @@ export const FILTER_PRESETS: FilterPreset[] = [
   },
 ];
 
+// ============================================================================
+// CÂN CHỈNH CAMERA GỐC (Admin) — lớp hiệu chỉnh nền áp dụng ngầm lên MỌI ảnh chụp, TRƯỚC khi tới
+// phong cách lọc màu khách tự chọn ở trên (FILTER_PRESETS). Dùng để bù ánh sáng thực tế của buổi
+// chụp (đèn vàng/yếu, camera điện thoại lên màu khác nhau...) — chỉnh đúng 1 lần cho cả sự kiện.
+// ============================================================================
+export interface CameraCalibrationPreset {
+  id: import('../types').CameraCalibrationConfig['presetId'];
+  name: string;
+  description: string;
+  values: Omit<import('../types').CameraCalibrationConfig, 'presetId'>;
+}
+
+export const CAMERA_CALIBRATION_PRESETS: CameraCalibrationPreset[] = [
+  {
+    id: 'natural',
+    name: 'Tự Nhiên Chuẩn',
+    description: 'Gần như giữ nguyên màu gốc, chỉ chỉnh nhẹ cho cân đối — hợp không gian đủ sáng.',
+    values: { brightness: 0, contrast: 0, saturation: 0, warmth: 0, skinSmooth: 15, sharpen: 10 },
+  },
+  {
+    id: 'warm-skin',
+    name: 'Da Đẹp Ấm Áp',
+    description: 'Nâng tông ấm, da hồng hào mịn màng — hợp studio đèn vàng, tiệc cưới, sự kiện trong nhà.',
+    values: { brightness: 8, contrast: 4, saturation: 6, warmth: 14, skinSmooth: 35, sharpen: 15 },
+  },
+  {
+    id: 'vivid-studio',
+    name: 'Studio Rực Rỡ',
+    description: 'Tương phản & bão hòa cao, sắc nét rõ ràng — hợp sự kiện nhiều đèn, sân khấu, ban đêm.',
+    values: { brightness: 6, contrast: 14, saturation: 18, warmth: 4, skinSmooth: 10, sharpen: 25 },
+  },
+  {
+    id: 'soft-light',
+    name: 'Ánh Sáng Dịu Nhẹ',
+    description: 'Sáng dịu, tương phản thấp, da mềm mại như phim analog — hợp chụp ngoài trời/ánh sáng tự nhiên.',
+    values: { brightness: 10, contrast: -8, saturation: -4, warmth: 6, skinSmooth: 45, sharpen: 5 },
+  },
+];
+
+export const DEFAULT_CAMERA_CALIBRATION: import('../types').CameraCalibrationConfig = {
+  presetId: 'natural',
+  ...CAMERA_CALIBRATION_PRESETS[0].values,
+};
+
 export const FRAME_COLORS: { id: import('../types').FrameColor; name: string; hex: string; textHex: string; borderHex: string }[] = [
   { id: 'white', name: 'Giấy Trắng Kem Studio', hex: '#F9F7F2', textHex: '#1A1A1A', borderHex: 'rgba(26, 26, 26, 0.12)' },
   { id: 'cream', name: 'Vải Lanh Ấm', hex: '#EFEEE8', textHex: '#1A1A1A', borderHex: 'rgba(26, 26, 26, 0.15)' },
