@@ -1,4 +1,4 @@
-import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker } from '../types';
+import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker, CameraCalibrationConfig } from '../types';
 import { FILTER_PRESETS, FRAME_COLORS, LAYOUT_OPTIONS } from '../constants/filters';
 
 /**
@@ -33,6 +33,155 @@ export function applyFilterToContext(
   } catch {
     ctx.filter = 'none';
   }
+}
+
+// ============================================================================
+// CÂN CHỈNH CAMERA GỐC (Admin) — dựng chuỗi CSS filter cho phần "nước ảnh" cơ bản (sáng/tương
+// phản/bão hòa/tông ấm-lạnh), và toàn bộ luồng xử lý để bake (nướng) lớp cân chỉnh này thẳng vào
+// ảnh chụp ra — áp dụng TRƯỚC khi tới phong cách lọc màu khách tự chọn (việc đó vẫn xử lý riêng ở
+// applyFilterToContext như cũ, tại thời điểm ghép ảnh vào tờ in).
+// ============================================================================
+
+/**
+ * Dựng chuỗi CSS filter cho phần sáng/tương phản/bão hòa/tông ấm-lạnh của lớp Cân Chỉnh Camera Gốc.
+ * Dùng chung cho cả khung xem trước trực tiếp (màn xem trước trong Admin) lẫn lúc "nướng" vào ảnh
+ * chụp thật (qua ctx.filter trên Canvas 2D — cú pháp giống hệt CSS filter).
+ * Không gồm phần làm mịn da / tăng nét — 2 phần đó xử lý riêng bằng cách vẽ nhiều lớp / duyệt từng
+ * điểm ảnh (xem drawSkinSmoothPass & applySharpenPass bên dưới), CSS filter thường không làm được.
+ */
+export function buildCalibrationCssFilter(calib?: CameraCalibrationConfig | null): string {
+  if (!calib) return 'none';
+  const parts: string[] = [];
+  if (calib.brightness) parts.push(`brightness(${100 + calib.brightness}%)`);
+  if (calib.contrast) parts.push(`contrast(${100 + calib.contrast}%)`);
+  if (calib.saturation) parts.push(`saturate(${100 + calib.saturation}%)`);
+  // Tông ấm/lạnh: dương (ấm hơn) đẩy nhẹ qua sepia (ánh vàng cam ấm), âm (lạnh hơn) xoay nhẹ hue
+  // về phía xanh — CSS không có "chỉnh cân bằng trắng" thật sự nên đây là cách xấp xỉ, cùng kiểu
+  // đang dùng cho các phong cách lọc màu có sẵn ở FILTER_PRESETS (sepia/hue-rotate).
+  if (calib.warmth > 0) {
+    parts.push(`sepia(${Math.min(30, calib.warmth * 0.5)}%)`);
+  } else if (calib.warmth < 0) {
+    parts.push(`hue-rotate(${calib.warmth * 0.5}deg) saturate(${100 + Math.abs(calib.warmth) * 0.2}%)`);
+  }
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+/**
+ * Vẽ thêm 1 lớp mờ (Gaussian blur) đè lên canvas với độ mờ đục (alpha) tỉ lệ theo % "Độ Mịn Da" —
+ * trộn giữa ảnh nét gốc (lớp dưới) và bản mờ (lớp trên) tạo cảm giác da mịn màng hơn. Đây là làm
+ * mịn TOÀN ẢNH (không nhận diện khuôn mặt riêng) theo đúng lựa chọn đơn giản, nhẹ máy đã chọn —
+ * chạy tốt trên mọi tablet/điện thoại kể cả máy đời cũ.
+ */
+function drawSkinSmoothPass(
+  ctx: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  skinSmooth: number
+) {
+  if (!skinSmooth || skinSmooth <= 0) return;
+  const amount = Math.min(100, skinSmooth) / 100;
+  // Bán kính mờ tỉ lệ theo độ phân giải ảnh để hiệu ứng đồng nhất dù ảnh to hay nhỏ.
+  const blurPx = Math.max(2, Math.round(width / 260));
+  // Chặn trần độ mờ đục ở 55% — dù kéo "Độ Mịn Da" lên tối đa cũng không làm ảnh mất nét hoàn toàn.
+  const alpha = amount * 0.55;
+
+  ctx.save();
+  ctx.filter = `blur(${blurPx}px)`;
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(source, 0, 0, width, height);
+  ctx.restore();
+}
+
+/**
+ * Tăng độ nét bằng bộ lọc tích chập (convolution) kiểu "unsharp mask" đơn giản, chạy trực tiếp
+ * trên dữ liệu điểm ảnh — CSS/Canvas filter không có sẵn "sharpen" nên phải tự làm bằng tay. Cường
+ * độ càng cao thì viền/chi tiết càng được đẩy rõ hơn — chỉ áp dụng lên ẢNH ĐÃ CHỤP (không áp dụng
+ * cho khung xem trực tiếp) vì việc này khá tốn CPU nếu chạy lặp lại mỗi khung hình video.
+ */
+function applySharpenPass(ctx: CanvasRenderingContext2D, width: number, height: number, sharpen: number) {
+  if (!sharpen || sharpen <= 0) return;
+  const amount = Math.min(100, sharpen) / 100;
+  // Hệ số nhân của kernel — giữ nhỏ (tối đa ~0.35) để tránh sinh nhiễu/viền cứng khi kéo lên cao.
+  const k = amount * 0.35;
+  if (k <= 0) return;
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const src = imageData.data;
+  const out = new Uint8ClampedArray(src.length);
+
+  // Kernel unsharp mask 3x3: tâm được đẩy sáng lên, 4 điểm lân cận (trên/dưới/trái/phải) bị trừ đi.
+  const centerWeight = 1 + 4 * k;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+        // Viền ngoài cùng: giữ nguyên, không đủ điểm lân cận để tính kernel.
+        out[i] = src[i];
+        out[i + 1] = src[i + 1];
+        out[i + 2] = src[i + 2];
+        out[i + 3] = src[i + 3];
+        continue;
+      }
+      const iUp = i - width * 4;
+      const iDown = i + width * 4;
+      const iLeft = i - 4;
+      const iRight = i + 4;
+      for (let c = 0; c < 3; c++) {
+        const val =
+          src[i + c] * centerWeight - k * (src[iUp + c] + src[iDown + c] + src[iLeft + c] + src[iRight + c]);
+        out[i + c] = val;
+      }
+      out[i + 3] = src[i + 3];
+    }
+  }
+
+  imageData.data.set(out);
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Chụp 1 khung hình từ video, "nướng" (bake) thẳng lớp Cân Chỉnh Camera Gốc của Admin vào ảnh —
+ * gồm sáng/tương phản/bão hòa/tông ấm-lạnh (CSS filter), làm mịn da (trộn lớp mờ), rồi tăng nét
+ * (convolution). Trả về dataURL JPEG — dùng thay cho việc vẽ thẳng video vào canvas không xử lý gì.
+ * Phong cách lọc màu khách tự chọn (FILTER_PRESETS) KHÔNG áp dụng ở đây — vẫn giữ nguyên cách cũ,
+ * chỉ áp lúc ghép ảnh vào tờ in (xem applyFilterToContext ở buildStripCanvas).
+ */
+export function captureCalibratedFrame(
+  video: HTMLVideoElement,
+  calibration: CameraCalibrationConfig | undefined | null,
+  mirror: boolean,
+  quality = 0.95
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.save();
+  if (mirror) {
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+
+  // 1. Sáng/tương phản/bão hòa/tông ấm-lạnh — vẽ 1 lần với ctx.filter đã bật.
+  ctx.filter = buildCalibrationCssFilter(calibration);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.filter = 'none';
+
+  // 2. Làm mịn da (trộn thêm 1 lớp mờ đè lên, cũng phải vẽ trong hệ tọa độ đã lật gương ở trên).
+  if (calibration) {
+    drawSkinSmoothPass(ctx, video, canvas.width, canvas.height, calibration.skinSmooth);
+  }
+  ctx.restore();
+
+  // 3. Tăng nét — chạy trên dữ liệu điểm ảnh thật của canvas (không cần quan tâm lật gương nữa).
+  if (calibration && calibration.sharpen > 0) {
+    applySharpenPass(ctx, canvas.width, canvas.height, calibration.sharpen);
+  }
+
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 /**
