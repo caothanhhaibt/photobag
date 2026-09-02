@@ -32,6 +32,9 @@ export interface AnalyticsStats {
 export interface KioskSecurityConfig {
   adminPin: string; // Default: '1234'
   enableKioskLock: boolean; // Vô hiệu hóa chuột phải, phím F12, phím Esc
+  // Hiện/ẩn nút nổi "Toàn Màn Hình" cho khách thấy ở mọi màn hình (mặc định BẬT — undefined cũng
+  // coi như true, xem FullscreenToggleButton.tsx). Tắt đi thì nút biến mất khỏi giao diện khách,
+  // nhân viên vẫn bật lại được bất cứ lúc nào ngay tại đây.
   enableFullScreenKiosk: boolean;
   hideAdminGearButton: boolean; // Ẩn nút cài đặt trên màn hình (mở bằng chạm 3 lần logo)
   autoResetAfterShareSeconds: number; // Tự động về màn hình chờ sau khi in/chia sẻ (VD: 30s)

@@ -898,7 +898,7 @@ export default function App() {
       {/* NÚT TOÀN MÀN HÌNH — nổi ở mọi màn hình, xem chi tiết trong FullscreenToggleButton.tsx.
           Đặt sau AdminDashboardModal trong cây JSX nhưng z-index thấp hơn (z-40 so với z-50 của
           modal) nên khi bảng Admin đang mở, nút này tự bị che đi, không lấn giao diện PIN. */}
-      <FullscreenToggleButton />
+      <FullscreenToggleButton visible={eventConfig.security?.enableFullScreenKiosk ?? true} />
     </div>
   );
 }
