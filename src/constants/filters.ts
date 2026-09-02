@@ -8,6 +8,11 @@ export const SAMPLE_PHOTO_SOLO = 'https://images.unsplash.com/photo-153452874177
 export const SAMPLE_PHOTO_DUO = 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=1000&auto=format&fit=crop';
 export const SAMPLE_PHOTO_STUDIO = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop';
 
+// Rút từ 14 xuống còn 8 phong cách (bỏ bớt các bộ trùng tông ấm/hồng gây rối mắt khi khách chọn
+// nhanh trước máy) — theo khảo sát cộng đồng photobooth Hàn Quốc (Life4Cuts/Haru Film/Photoism) &
+// cộng đồng preset Lightroom về các tông màu thực sự phổ biến/khác biệt rõ rệt (xem trao đổi ngày
+// chốt danh sách này). Đã bỏ: Phim Cổ Điển 70s, Hoàng Hôn Ấm Áp, Tím Mộng Mơ, Hồng Đào Ngọt Ngào,
+// Kẹo Ngọt Rực Rỡ, Phim Fuji 90s — đều trùng lặp nhiều với các bộ còn lại hoặc quá kén khách.
 export const FILTER_PRESETS: FilterPreset[] = [
   // 1. NGUYÊN BẢN (Natural)
   {
@@ -19,7 +24,8 @@ export const FILTER_PRESETS: FilterPreset[] = [
     filterCss: () => 'none',
   },
 
-  // 2. K-PHOTOBOOTHS HÀN QUỐC (Trắng hồng, mịn da, trong trẻo như Haru Film / Life4Cuts)
+  // 2. K-PHOTOBOOTHS HÀN QUỐC (Trắng hồng, mịn da, trong trẻo như Haru Film / Life4Cuts — bộ lọc
+  // CHỦ LỰC, đúng công thức thật của các chuỗi photobooth Hàn Quốc nổi tiếng nhất, không được bỏ)
   {
     id: 'k-photobooth',
     name: 'Hàn Quốc Trắng Hồng',
@@ -34,22 +40,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 3. PEACH BLOSSOM (Hồng Đào Ngọt Ngào cho Trẻ Em & Bạn Bè)
-  {
-    id: 'peach-blossom',
-    name: 'Hồng Đào Ngọt Ngào',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCzrOBnA49-H2L8vvjrlvjNXSx349VQIPSe9205KFbn1xJ40UweagY2-8lbHp__30sJP_7Lk6_zpAgw6XNi0DzJwLq1-6sc7NEOP01fQ6_rr_yRq61J9h2Q3Zv3LtCvVZTw5HqOqWDM5vlKBIEXJX___gBq0Piv4d-6Yne7LG6X6wTRud69NTtELaPWLtzEzfQLV6IaWni5UmgsVBpmKyiZVg5grMzVpfSRR7VcRJkMp-kvVX74lJm8WA',
-    description: 'Tone màu ấm ửng hồng dễ thương, tôn da sáng hồng hào tự nhiên.',
-    defaultIntensity: 75,
-    overlayColor: 'rgba(251, 113, 133, 0.12)',
-    blendMode: 'soft-light',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `brightness(${100 + val * 6}%) contrast(${100 + val * 4}%) saturate(${100 + val * 15}%) sepia(${val * 12}%)`;
-    },
-  },
-
-  // 4. TOKYO BREEZE (Phim Nhật Bản Trong Vắt)
+  // 3. TOKYO BREEZE (Phim Nhật Bản Trong Vắt — đại diện nhóm "editorial lạnh" đang lên)
   {
     id: 'tokyo-breeze',
     name: 'Nhật Bản Trong Vắt',
@@ -64,7 +55,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 5. KODAK PORTRA 400 (Phim Analog Vàng Hổ Phách Kinh Điển)
+  // 4. KODAK PORTRA 400 (Phim Analog Vàng Hổ Phách Kinh Điển — tông ấm phổ biến nhất cộng đồng)
   {
     id: 'kodak-portra',
     name: 'Kodak Portra 400',
@@ -79,22 +70,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 6. FUJI 90s COLOR (Màu Phim Thập Niên 90)
-  {
-    id: 'fuji-film',
-    name: 'Phim Fuji 90s',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDO_0Ri6cW0Sc0Z4jSVNQ6tXenhWU7UPFm7h4Z1HhNdl3Mu7l7IJK43gEikZQw1m904xDR6qUIsGvwGpaL5H0FyXcvYhqoag0FocuSg90kfszeAuoeyF6rKeHcgEdcuiTuZLJj9zjyoKPRlLzlHMv3UTzlGdPNNg2AblchwMBQ2_tVB7nnFLy9RkpswaQrO87LzQ8EdtZDIBNZyYA9P4isecWI8H_BcEVNLL6RvS8rIdHtlnwTA3PLguA',
-    description: 'Chất màu hoài niệm thập niên 90 với sắc xanh lá dịu và vùng bóng ám vàng cát.',
-    defaultIntensity: 75,
-    overlayColor: 'rgba(168, 85, 247, 0.08)',
-    blendMode: 'overlay',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `contrast(${100 + val * 20}%) brightness(${100 - val * 2}%) saturate(${100 + val * 12}%) sepia(${val * 18}%) hue-rotate(-${val * 6}deg)`;
-    },
-  },
-
-  // 7. Y2K FLASH (Đèn Flash & Tương Phản Thập Niên 2000)
+  // 5. Y2K FLASH (Đèn Flash & Tương Phản Thập Niên 2000 — trào lưu Y2K đang thịnh hành trở lại)
   {
     id: 'y2k-flash',
     name: 'Y2K Flash 2000s',
@@ -109,52 +85,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 8. CANDY POP (Kẹo Ngọt Rực Rỡ cho Trẻ Em)
-  {
-    id: 'candy-pop',
-    name: 'Candy Pop Vui Nhộn',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDiqxW4KmZKaxpmXL-c0HW2M5E0k6s5lzoFbsWKb1Ez7ZvnfQsOR5TYaHcDFY78Km3H3UNgISFQ223LrnffTI6B7xPrmJYbBRLviTKKZPUjE_xiFB-hHbffJ8ukX82jF-zghz2tUVRkuYrKL5gwwH-_M0jmAavHQ-ueZRV_zrzY7KfQdq_Ae6pbw9o2OCvDZZ-_idsnvs_168yy2t8g6PqjfzHBRKrZn9BDBs-ZH5cRaAIh0FsB6eQIWA',
-    description: 'Tăng cường các gam màu tươi sáng, sinh động và vui tươi thích hợp cho ảnh trẻ em.',
-    defaultIntensity: 80,
-    overlayColor: 'rgba(244, 63, 94, 0.08)',
-    blendMode: 'color-dodge',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `saturate(${100 + val * 55}%) contrast(${100 + val * 18}%) brightness(${100 + val * 6}%)`;
-    },
-  },
-
-  // 9. VINTAGE RETRO (Phim Cổ Điển Thập Niên 70)
-  {
-    id: 'vintage',
-    name: 'Phim Cổ Điển 70s',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDO_0Ri6cW0Sc0Z4jSVNQ6tXenhWU7UPFm7h4Z1HhNdl3Mu7l7IJK43gEikZQw1m904xDR6qUIsGvwGpaL5H0FyXcvYhqoag0FocuSg90kfszeAuoeyF6rKeHcgEdcuiTuZLJj9zjyoKPRlLzlHMv3UTzlGdPNNg2AblchwMBQ2_tVB7nnFLy9RkpswaQrO87LzQ8EdtZDIBNZyYA9P4isecWI8H_BcEVNLL6RvS8rIdHtlnwTA3PLguA',
-    description: 'Tông màu phim analog thập niên 70 ấm áp, ánh vàng hổ phách dịu nhẹ.',
-    defaultIntensity: 75,
-    overlayColor: 'rgba(217, 119, 6, 0.14)',
-    blendMode: 'color-burn',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `sepia(${val * 55}%) contrast(${100 + val * 18}%) brightness(${100 + val * 4}%) saturate(${100 - val * 15}%)`;
-    },
-  },
-
-  // 10. NEON DREAM (Tím Mộng Mơ Lung Linh)
-  {
-    id: 'neon-dream',
-    name: 'Tím Mộng Mơ',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDiqxW4KmZKaxpmXL-c0HW2M5E0k6s5lzoFbsWKb1Ez7ZvnfQsOR5TYaHcDFY78Km3H3UNgISFQ223LrnffTI6B7xPrmJYbBRLviTKKZPUjE_xiFB-hHbffJ8ukX82jF-zghz2tUVRkuYrKL5gwwH-_M0jmAavHQ-ueZRV_zrzY7KfQdq_Ae6pbw9o2OCvDZZ-_idsnvs_168yy2t8g6PqjfzHBRKrZn9BDBs-ZH5cRaAIh0FsB6eQIWA',
-    description: 'Ánh tím hồng lung linh huyền ảo tạo cảm giác hiện đại và cuốn hút.',
-    defaultIntensity: 75,
-    overlayColor: 'rgba(168, 85, 247, 0.14)',
-    blendMode: 'overlay',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `contrast(${100 + val * 22}%) brightness(${100 - val * 2}%) saturate(${100 + val * 28}%) hue-rotate(${val * 20}deg)`;
-    },
-  },
-
-  // 11. CINE TEAL & ORANGE (Điện Ảnh Hollywood)
+  // 6. CINE TEAL & ORANGE (Điện Ảnh Hollywood)
   {
     id: 'cine',
     name: 'Điện Ảnh Hollywood',
@@ -169,22 +100,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 12. HOÀNG HÔN (Sunset Gold)
-  {
-    id: 'sunset',
-    name: 'Hoàng Hôn Ấm Áp',
-    thumbnail: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDO_0Ri6cW0Sc0Z4jSVNQ6tXenhWU7UPFm7h4Z1HhNdl3Mu7l7IJK43gEikZQw1m904xDR6qUIsGvwGpaL5H0FyXcvYhqoag0FocuSg90kfszeAuoeyF6rKeHcgEdcuiTuZLJj9zjyoKPRlLzlHMv3UTzlGdPNNg2AblchwMBQ2_tVB7nnFLy9RkpswaQrO87LzQ8EdtZDIBNZyYA9P4isecWI8H_BcEVNLL6RvS8rIdHtlnwTA3PLguA',
-    description: 'Ánh nắng hoàng hôn vàng cam lãng mạn phủ nhẹ lên làn da.',
-    defaultIntensity: 75,
-    overlayColor: 'rgba(251, 146, 60, 0.16)',
-    blendMode: 'screen',
-    filterCss: (intensity: number) => {
-      const val = intensity / 100;
-      return `sepia(${val * 35}%) saturate(${100 + val * 30}%) brightness(${100 + val * 8}%) hue-rotate(-6deg)`;
-    },
-  },
-
-  // 13. SILVER STUDIO BW (Đen Trắng Bạc Cao Cấp)
+  // 7. SILVER STUDIO BW (Đen Trắng Bạc Cao Cấp)
   {
     id: 'bw',
     name: 'Đen Trắng Studio',
@@ -197,7 +113,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
     },
   },
 
-  // 14. NOIR CINEMA (Phim Noir Đậm Chất Nghệ Thuật)
+  // 8. NOIR CINEMA (Phim Noir Đậm Chất Nghệ Thuật)
   {
     id: 'noir',
     name: 'Phim Noir Sâu Lắng',
@@ -223,30 +139,56 @@ export interface CameraCalibrationPreset {
   values: Omit<import('../types').CameraCalibrationConfig, 'presetId'>;
 }
 
+// Toạ độ x/y của mỗi bánh xe: trục x dương ~ hướng ấm/cam (hue ~0°), âm ~ hướng lạnh/xanh dương
+// (hue ~180°); trục y dương đẩy nhẹ qua lục, âm đẩy nhẹ qua đỏ tía — cùng quy ước với ColorWheelPicker.
 export const CAMERA_CALIBRATION_PRESETS: CameraCalibrationPreset[] = [
   {
     id: 'natural',
     name: 'Tự Nhiên Chuẩn',
     description: 'Gần như giữ nguyên màu gốc, chỉ chỉnh nhẹ cho cân đối — hợp không gian đủ sáng.',
-    values: { brightness: 0, contrast: 0, saturation: 0, warmth: 0, skinSmooth: 15, sharpen: 10 },
+    values: {
+      shadows: { x: 0, y: 0, luminance: 0 },
+      midtones: { x: 0, y: 0, luminance: 0 },
+      highlights: { x: 0, y: 0, luminance: 0 },
+      skinSmooth: 15,
+      sharpen: 10,
+    },
   },
   {
     id: 'warm-skin',
     name: 'Da Đẹp Ấm Áp',
     description: 'Nâng tông ấm, da hồng hào mịn màng — hợp studio đèn vàng, tiệc cưới, sự kiện trong nhà.',
-    values: { brightness: 8, contrast: 4, saturation: 6, warmth: 14, skinSmooth: 35, sharpen: 15 },
+    values: {
+      shadows: { x: 0.08, y: 0.03, luminance: 5 },
+      midtones: { x: 0.2, y: 0.08, luminance: 6 },
+      highlights: { x: 0.14, y: 0.05, luminance: 4 },
+      skinSmooth: 35,
+      sharpen: 15,
+    },
   },
   {
     id: 'vivid-studio',
     name: 'Studio Rực Rỡ',
     description: 'Tương phản & bão hòa cao, sắc nét rõ ràng — hợp sự kiện nhiều đèn, sân khấu, ban đêm.',
-    values: { brightness: 6, contrast: 14, saturation: 18, warmth: 4, skinSmooth: 10, sharpen: 25 },
+    values: {
+      shadows: { x: 0.05, y: -0.03, luminance: -8 },
+      midtones: { x: 0.1, y: 0.04, luminance: 4 },
+      highlights: { x: 0.08, y: 0.03, luminance: 12 },
+      skinSmooth: 10,
+      sharpen: 25,
+    },
   },
   {
     id: 'soft-light',
     name: 'Ánh Sáng Dịu Nhẹ',
     description: 'Sáng dịu, tương phản thấp, da mềm mại như phim analog — hợp chụp ngoài trời/ánh sáng tự nhiên.',
-    values: { brightness: 10, contrast: -8, saturation: -4, warmth: 6, skinSmooth: 45, sharpen: 5 },
+    values: {
+      shadows: { x: 0.07, y: 0.04, luminance: 12 },
+      midtones: { x: 0.12, y: 0.05, luminance: 8 },
+      highlights: { x: 0.06, y: 0.02, luminance: 5 },
+      skinSmooth: 45,
+      sharpen: 5,
+    },
   },
 ];
 
