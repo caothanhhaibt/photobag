@@ -1,4 +1,4 @@
-import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker, CameraCalibrationConfig } from '../types';
+import { CapturedPhoto, FrameColor, StripLayout, FrameStyle, SlotCustomization, PlacedSticker, CameraCalibrationConfig, ColorWheelValue } from '../types';
 import { FILTER_PRESETS, FRAME_COLORS, LAYOUT_OPTIONS } from '../constants/filters';
 
 /**
@@ -43,27 +43,131 @@ export function applyFilterToContext(
 // ============================================================================
 
 /**
- * Dựng chuỗi CSS filter cho phần sáng/tương phản/bão hòa/tông ấm-lạnh của lớp Cân Chỉnh Camera Gốc.
- * Dùng chung cho cả khung xem trước trực tiếp (màn xem trước trong Admin) lẫn lúc "nướng" vào ảnh
- * chụp thật (qua ctx.filter trên Canvas 2D — cú pháp giống hệt CSS filter).
- * Không gồm phần làm mịn da / tăng nét — 2 phần đó xử lý riêng bằng cách vẽ nhiều lớp / duyệt từng
- * điểm ảnh (xem drawSkinSmoothPass & applySharpenPass bên dưới), CSS filter thường không làm được.
+ * Xấp xỉ (KHÔNG chính xác 100%) lớp "Cân Chỉnh Camera Gốc" thành 1 chuỗi CSS filter — dùng riêng
+ * cho khung xem trực tiếp (video đang chạy, ví dụ khung xem trước của khách ở CameraScreen), vì CSS
+ * filter không thể tính đúng công thức 3 bánh xe màu tách theo vùng tông (tối/trung/sáng) như
+ * applyColorWheelGrading bên dưới — nơi đó mới là công thức THẬT áp lên ảnh đã chụp.
+ * Lấy bánh xe VÙNG TRUNG (midtones) làm đại diện vì đây là vùng chiếm phần lớn khung hình (da mặt,
+ * nền), cộng thêm độ sáng trung bình của cả 3 vùng — đủ để khung xem trực tiếp không bị lệch tông
+ * quá xa so với ảnh chụp thật ra, dù không khớp tuyệt đối.
  */
 export function buildCalibrationCssFilter(calib?: CameraCalibrationConfig | null): string {
   if (!calib) return 'none';
   const parts: string[] = [];
-  if (calib.brightness) parts.push(`brightness(${100 + calib.brightness}%)`);
-  if (calib.contrast) parts.push(`contrast(${100 + calib.contrast}%)`);
-  if (calib.saturation) parts.push(`saturate(${100 + calib.saturation}%)`);
-  // Tông ấm/lạnh: dương (ấm hơn) đẩy nhẹ qua sepia (ánh vàng cam ấm), âm (lạnh hơn) xoay nhẹ hue
-  // về phía xanh — CSS không có "chỉnh cân bằng trắng" thật sự nên đây là cách xấp xỉ, cùng kiểu
-  // đang dùng cho các phong cách lọc màu có sẵn ở FILTER_PRESETS (sepia/hue-rotate).
-  if (calib.warmth > 0) {
-    parts.push(`sepia(${Math.min(30, calib.warmth * 0.5)}%)`);
-  } else if (calib.warmth < 0) {
-    parts.push(`hue-rotate(${calib.warmth * 0.5}deg) saturate(${100 + Math.abs(calib.warmth) * 0.2}%)`);
+
+  const avgLuminance = (calib.shadows.luminance + calib.midtones.luminance + calib.highlights.luminance) / 3;
+  if (avgLuminance) parts.push(`brightness(${100 + avgLuminance}%)`);
+
+  const { x, y } = calib.midtones;
+  const strength = Math.min(1, Math.sqrt(x * x + y * y));
+  if (strength > 0.02) {
+    const hueDeg = (Math.atan2(y, x) * 180) / Math.PI;
+    const isWarm = Math.cos((hueDeg * Math.PI) / 180) >= 0;
+    // Ấm (hue gần 0°) đẩy qua sepia (ánh vàng cam ấm), lạnh (hue gần 180°) xoay nhẹ hue về phía
+    // xanh — CSS không có "chỉnh cân bằng trắng" thật sự nên đây là cách xấp xỉ, cùng kiểu đang
+    // dùng cho các phong cách lọc màu có sẵn ở FILTER_PRESETS (sepia/hue-rotate).
+    if (isWarm) {
+      parts.push(`sepia(${Math.min(30, strength * 35)}%) saturate(${100 + strength * 15}%)`);
+    } else {
+      parts.push(`hue-rotate(${-strength * 20}deg) saturate(${100 + strength * 10}%)`);
+    }
   }
   return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+/**
+ * Chuyển 1 bánh xe màu (x/y trong hình tròn bán kính 1) thành góc màu (độ) + độ mạnh (0-1) — góc
+ * dùng làm hue khi đổ tint, độ mạnh = khoảng cách từ tâm bánh xe (0 = giữa = không đẩy màu).
+ */
+function wheelToHueStrength(wheel: ColorWheelValue): { hueDeg: number; strength: number } {
+  const strength = Math.min(1, Math.sqrt(wheel.x * wheel.x + wheel.y * wheel.y));
+  const hueDeg = (Math.atan2(wheel.y, wheel.x) * 180) / Math.PI;
+  return { hueDeg, strength };
+}
+
+/**
+ * Đổi 1 góc màu (độ) + độ bão hòa (0-1) thành RGB tint quanh mức xám trung tính 128 (dùng công thức
+ * HSL với L=0.5) — dùng để đổ màu ngả theo đúng hướng đã kéo bánh xe.
+ */
+function hueToRgbTint(hueDeg: number): [number, number, number] {
+  const h = (((hueDeg % 360) + 360) % 360) / 360;
+  const hue2rgb = (p: number, q: number, t: number) => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  // L=0.5, S=1 → q = L*(1+S) = 1, p = 2L - q = 0
+  const r = hue2rgb(0, 1, h + 1 / 3);
+  const g = hue2rgb(0, 1, h);
+  const b = hue2rgb(0, 1, h - 1 / 3);
+  return [r * 255, g * 255, b * 255];
+}
+
+/**
+ * THUẬT TOÁN CHÍNH của "Bánh Xe Màu 3 Vùng Tông" kiểu Blackmagic/DaVinci Resolve — Lift/Gamma/Gain
+ * (Shadows/Midtones/Highlights). Duyệt từng điểm ảnh, tính trọng số thuộc về mỗi vùng tông dựa theo
+ * độ sáng (luminance) của chính điểm ảnh đó (điểm càng tối càng thuộc nhiều về "Vùng Tối", càng
+ * sáng càng thuộc nhiều về "Vùng Sáng"), rồi trộn màu ngả (từ x/y bánh xe) + độ sáng riêng
+ * (luminance từng vùng) của cả 3 vùng theo đúng trọng số đó — cho phép vd đẩy vùng sáng ấm hơn (da
+ * hồng hào) mà giữ vùng tối trung tính, khác hẳn với chỉnh 1 thanh trượt tổng áp đều cả ảnh.
+ * Chạy trực tiếp trên ImageData (sửa tại chỗ) — dùng CHUNG cho cả lúc "nướng" vào ảnh chụp thật lẫn
+ * khung xem trước dạng canvas (xem CameraCalibrationLivePreview ở AdminDashboardModal.tsx).
+ */
+export function applyColorWheelGrading(imageData: ImageData, calibration: CameraCalibrationConfig) {
+  const zones: ColorWheelValue[] = [calibration.shadows, calibration.midtones, calibration.highlights];
+  const hasEffect = zones.some((z) => z.x !== 0 || z.y !== 0 || z.luminance !== 0);
+  if (!hasEffect) return;
+
+  const tint = zones.map((wheel) => {
+    const { hueDeg, strength } = wheelToHueStrength(wheel);
+    return { rgb: hueToRgbTint(hueDeg), strength, luminance: wheel.luminance };
+  });
+
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    // Độ sáng chuẩn hoá 0-1 (công thức Rec.601) để quyết định trọng số mỗi vùng tông.
+    const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+    const shadowWeight = Math.min(1, Math.max(0, 1 - 2 * L));
+    const highlightWeight = Math.min(1, Math.max(0, (L - 0.5) * 2));
+    const midtoneWeight = Math.max(0, 1 - shadowWeight - highlightWeight);
+    const weights = [shadowWeight, midtoneWeight, highlightWeight];
+
+    let addR = 0;
+    let addG = 0;
+    let addB = 0;
+    for (let z = 0; z < 3; z++) {
+      const w = weights[z];
+      if (w <= 0) continue;
+      const t = tint[z];
+      // Đẩy màu theo độ mạnh đã kéo tâm bánh xe — trộn giữa xám trung tính (128) và tint đầy màu,
+      // nhân với trọng số vùng tông của điểm ảnh này.
+      if (t.strength > 0) {
+        const push = w * t.strength * 0.5;
+        addR += (t.rgb[0] - 128) * push;
+        addG += (t.rgb[1] - 128) * push;
+        addB += (t.rgb[2] - 128) * push;
+      }
+      // Chỉnh sáng riêng cho từng vùng tông (thanh trượt luminance cạnh bánh xe).
+      if (t.luminance !== 0) {
+        const lumAdd = w * (t.luminance / 50) * 40;
+        addR += lumAdd;
+        addG += lumAdd;
+        addB += lumAdd;
+      }
+    }
+
+    data[i] = Math.min(255, Math.max(0, r + addR));
+    data[i + 1] = Math.min(255, Math.max(0, g + addG));
+    data[i + 2] = Math.min(255, Math.max(0, b + addB));
+  }
 }
 
 /**
@@ -72,7 +176,7 @@ export function buildCalibrationCssFilter(calib?: CameraCalibrationConfig | null
  * mịn TOÀN ẢNH (không nhận diện khuôn mặt riêng) theo đúng lựa chọn đơn giản, nhẹ máy đã chọn —
  * chạy tốt trên mọi tablet/điện thoại kể cả máy đời cũ.
  */
-function drawSkinSmoothPass(
+export function drawSkinSmoothPass(
   ctx: CanvasRenderingContext2D,
   source: CanvasImageSource,
   width: number,
@@ -142,8 +246,9 @@ function applySharpenPass(ctx: CanvasRenderingContext2D, width: number, height: 
 
 /**
  * Chụp 1 khung hình từ video, "nướng" (bake) thẳng lớp Cân Chỉnh Camera Gốc của Admin vào ảnh —
- * gồm sáng/tương phản/bão hòa/tông ấm-lạnh (CSS filter), làm mịn da (trộn lớp mờ), rồi tăng nét
- * (convolution). Trả về dataURL JPEG — dùng thay cho việc vẽ thẳng video vào canvas không xử lý gì.
+ * gồm bánh xe màu 3 vùng tông (applyColorWheelGrading, tính ĐÚNG 100% trên dữ liệu điểm ảnh, khác
+ * với bản xấp xỉ CSS ở khung xem trực tiếp), làm mịn da (trộn lớp mờ), rồi tăng nét (convolution).
+ * Trả về dataURL JPEG — dùng thay cho việc vẽ thẳng video vào canvas không xử lý gì.
  * Phong cách lọc màu khách tự chọn (FILTER_PRESETS) KHÔNG áp dụng ở đây — vẫn giữ nguyên cách cũ,
  * chỉ áp lúc ghép ảnh vào tờ in (xem applyFilterToContext ở buildStripCanvas).
  */
@@ -159,24 +264,30 @@ export function captureCalibratedFrame(
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
+  // 0. Vẽ khung hình gốc (lật gương nếu cần) — chưa xử lý gì.
   ctx.save();
   if (mirror) {
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
   }
-
-  // 1. Sáng/tương phản/bão hòa/tông ấm-lạnh — vẽ 1 lần với ctx.filter đã bật.
-  ctx.filter = buildCalibrationCssFilter(calibration);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  ctx.filter = 'none';
-
-  // 2. Làm mịn da (trộn thêm 1 lớp mờ đè lên, cũng phải vẽ trong hệ tọa độ đã lật gương ở trên).
-  if (calibration) {
-    drawSkinSmoothPass(ctx, video, canvas.width, canvas.height, calibration.skinSmooth);
-  }
   ctx.restore();
 
-  // 3. Tăng nét — chạy trên dữ liệu điểm ảnh thật của canvas (không cần quan tâm lật gương nữa).
+  // 1. Bánh xe màu 3 vùng tông — chỉnh trực tiếp trên dữ liệu điểm ảnh (không cần quan tâm lật
+  // gương nữa vì đã vẽ xong ở bước 0).
+  if (calibration) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    applyColorWheelGrading(imageData, calibration);
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // 2. Làm mịn da (trộn thêm 1 lớp mờ đè lên, lấy nguồn từ chính canvas đã lên màu ở bước 1 — chứ
+  // không lấy lại từ video gốc, để lớp mịn da phản ánh đúng màu đã cân chỉnh).
+  if (calibration) {
+    drawSkinSmoothPass(ctx, canvas, canvas.width, canvas.height, calibration.skinSmooth);
+  }
+
+  // 3. Tăng nét — chạy trên dữ liệu điểm ảnh thật của canvas.
   if (calibration && calibration.sharpen > 0) {
     applySharpenPass(ctx, canvas.width, canvas.height, calibration.sharpen);
   }
