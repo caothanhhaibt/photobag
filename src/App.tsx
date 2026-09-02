@@ -799,6 +799,8 @@ export default function App() {
                 onConfirmSelection={handleUseSessionForShare}
                 onRegisterPrintTrigger={handleRegisterGalleryPrint}
                 onUpdateCompletionStatus={setGalleryIsComplete}
+                captureMode={eventConfig.captureMode}
+                onSelectLayout={handleSelectLayout}
               />
             </div>
           )}
