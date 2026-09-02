@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, StripLayout, FrameColor, FrameStyle, CaptureMode } from '../types';
+import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, StripLayout, FrameColor, FrameStyle, CaptureMode, CameraCalibrationConfig } from '../types';
 import { SAMPLE_STUDIO_VIEWFINDER, SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, FILTER_PRESETS, LAYOUT_OPTIONS } from '../constants/filters';
 import { playShutterSound, playBeepSound, playSuccessChime } from '../utils/audio';
+import { captureCalibratedFrame, buildCalibrationCssFilter } from '../utils/canvas';
+import { tryEnableContinuousAutofocus } from '../utils/camera';
 import { X, RotateCcw, Camera } from 'lucide-react';
 
 interface CameraScreenProps {
@@ -47,6 +49,9 @@ interface CameraScreenProps {
   captureMode?: CaptureMode;
   onRegisterQuickPrintTrigger?: (triggerFn: () => void) => void;
   onUpdateBurstPhotoCount?: (count: number) => void;
+  // Lớp "Cân Chỉnh Camera Gốc" Admin cấu hình (sáng/tương phản/bão hòa/tông ấm-lạnh/mịn da/nét) —
+  // áp dụng ngầm lên MỌI ảnh chụp ra, trước cả phong cách lọc màu khách tự chọn (currentFilterId).
+  cameraCalibration?: CameraCalibrationConfig;
 }
 
 export const CameraScreen: React.FC<CameraScreenProps> = ({
@@ -92,6 +97,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   captureMode = 'photobooth',
   onRegisterQuickPrintTrigger,
   onUpdateBurstPhotoCount,
+  cameraCalibration,
 }) => {
   const [internalFlash, setInternalFlash] = useState(true);
   const flashEnabled = propFlashEnabled !== undefined ? propFlashEnabled : internalFlash;
@@ -203,6 +209,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         video: videoConstraints,
         audio: false,
       });
+
+      // Cố gắng bật lấy nét liên tục để bám nét khách nhanh hơn khi vừa vào khung hình — best-effort,
+      // không hỗ trợ thì bỏ qua, không ảnh hưởng gì tới việc mở camera (xem utils/camera.ts).
+      tryEnableContinuousAutofocus(stream);
 
       streamRef.current = stream;
       if (videoRef.current) {
@@ -478,28 +488,20 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     }
   };
 
-  // Hàm chụp khung hình hiện tại
+  // Hàm chụp khung hình hiện tại — "nướng" (bake) thẳng lớp Cân Chỉnh Camera Gốc của Admin (sáng/
+  // tương phản/bão hòa/tông ấm-lạnh/mịn da/nét) vào ảnh chụp ra ngay tại đây (xem utils/canvas.ts:
+  // captureCalibratedFrame). Phong cách lọc màu khách tự chọn vẫn áp dụng riêng sau, lúc ghép vào
+  // tờ in — không đổi so với trước.
   const captureFrame = useCallback((): string => {
     if (isLiveStream && videoRef.current && streamRef.current && videoRef.current.videoWidth > 0) {
-      const video = videoRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        if (cameraFacing === 'user') {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL('image/jpeg', 0.95);
-      }
+      const dataUrl = captureCalibratedFrame(videoRef.current, cameraCalibration, cameraFacing === 'user');
+      if (dataUrl) return dataUrl;
     }
 
     const samplePool = [SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, SAMPLE_STUDIO_VIEWFINDER];
     const chosen = samplePool[currentBurstIndex % samplePool.length] || SAMPLE_PHOTO_FRIENDS;
     return chosen;
-  }, [isLiveStream, cameraFacing, currentBurstIndex]);
+  }, [isLiveStream, cameraFacing, currentBurstIndex, cameraCalibration]);
 
   // Thực hiện chụp ảnh đơn trong chuỗi
   const takeSnapshot = useCallback(async (burstIdx: number, totalBurst: number, collected: CapturedPhoto[]) => {
@@ -749,7 +751,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             autoPlay
             muted
             style={{
-              filter: `${activePreset.filterCss(currentFilterIntensity)} brightness(${brightness}%)`,
+              filter: `${buildCalibrationCssFilter(cameraCalibration)} ${activePreset.filterCss(currentFilterIntensity)} brightness(${brightness}%)`,
             }}
             className={`w-full h-full object-cover transition-all duration-200 ${
               cameraFacing === 'user' ? '-scale-x-100' : ''
@@ -760,7 +762,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             className="w-full h-full bg-cover bg-center transition-all duration-200"
             style={{
               backgroundImage: `url('${SAMPLE_STUDIO_VIEWFINDER}')`,
-              filter: `${activePreset.filterCss(currentFilterIntensity)} brightness(${brightness}%)`,
+              filter: `${buildCalibrationCssFilter(cameraCalibration)} ${activePreset.filterCss(currentFilterIntensity)} brightness(${brightness}%)`,
             }}
           />
         )}

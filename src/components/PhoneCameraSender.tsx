@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Peer as PeerType, MediaConnection } from 'peerjs';
 import { Camera, RotateCcw, CheckCircle2, AlertTriangle, Wifi } from 'lucide-react';
+import { tryEnableContinuousAutofocus } from '../utils/camera';
 
 const PEER_ID_PREFIX = 'photobag-cam-';
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -198,6 +199,10 @@ export const PhoneCameraSender: React.FC = () => {
         setStatus('error');
         return;
       }
+
+      // Cố gắng bật lấy nét liên tục ngay trên điện thoại — phải làm ở đây (nơi mở camera thật) vì
+      // máy chính nhận hình qua Wifi không chỉnh lại được focus của camera điện thoại từ xa.
+      tryEnableContinuousAutofocus(stream);
 
       localStreamRef.current = stream;
       setLocalStream(stream);

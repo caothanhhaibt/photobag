@@ -45,6 +45,13 @@ import {
   Loader2,
   History,
   RotateCcw,
+  Wand2,
+  Sun,
+  Contrast,
+  Droplets,
+  Thermometer,
+  Feather,
+  Focus,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -56,8 +63,11 @@ import {
   KioskSecurityConfig,
   EventTheme,
   SlotPreviewMode,
+  CameraCalibrationConfig,
 } from '../types';
-import { FILTER_PRESETS } from '../constants/filters';
+import { FILTER_PRESETS, CAMERA_CALIBRATION_PRESETS, DEFAULT_CAMERA_CALIBRATION } from '../constants/filters';
+import { buildCalibrationCssFilter } from '../utils/canvas';
+import { tryEnableContinuousAutofocus } from '../utils/camera';
 import type { PairingStatus } from '../hooks/usePhoneCameraPairing';
 import { isCloudStorageConfigured, listCloudObjects, deleteCloudObject, type CloudObjectInfo } from '../utils/cloudStorage';
 
@@ -84,7 +94,112 @@ const PRESET_EVENT_IMAGES = [
   },
 ];
 
-export type AdminTab = 'idle_screen' | 'capture_settings' | 'analytics' | 'storage' | 'security' | 'booth_config';
+export type AdminTab = 'idle_screen' | 'capture_settings' | 'analytics' | 'storage' | 'security' | 'booth_config' | 'camera_calibration';
+
+// ============================================================================
+// KHUNG XEM TRƯỚC TRỰC TIẾP CHO TAB "BỘ LỌC CAMERA" — mở camera riêng của chính nó (độc lập với
+// CameraScreen, vì Admin có thể mở Dashboard này ngay từ Màn Hình Chờ, lúc CameraScreen chưa chạy)
+// để Admin thấy ngay hiệu ứng "Cân Chỉnh Camera Gốc" khi kéo thanh trượt, trước khi bấm Áp Dụng.
+// Chỉ áp dụng phần sáng/tương phản/bão hòa/tông ấm-lạnh + xấp xỉ độ mịn da bằng CSS (rẻ, mượt) —
+// phần tăng nét (sharpen) chỉ có tác dụng thật trên ảnh đã chụp nên không xem trước được ở đây.
+// ============================================================================
+const CameraCalibrationLivePreview: React.FC<{
+  calibration: CameraCalibrationConfig;
+  selectedCameraId?: string | null;
+}> = ({ calibration, selectedCameraId }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus('loading');
+
+    const start = async () => {
+      try {
+        const constraints: MediaStreamConstraints = {
+          video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : { facingMode: 'user' },
+          audio: false,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        tryEnableContinuousAutofocus(stream);
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        setStatus('ready');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    };
+
+    start();
+    return () => {
+      cancelled = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [selectedCameraId]);
+
+  const baseFilter = buildCalibrationCssFilter(calibration);
+  // Xấp xỉ "Độ Mịn Da" cho khung xem trước bằng cách chồng 1 lớp video mờ (blur) lên trên với độ
+  // mờ đục theo %, giống hệt cách sẽ bake vào ảnh chụp thật (xem drawSkinSmoothPass) — chỉ là làm
+  // bằng CSS 2 lớp thay vì vẽ tay trên canvas, cho mượt & rẻ khi hiển thị video trực tiếp.
+  const smoothAlpha = Math.min(100, Math.max(0, calibration.skinSmooth)) / 100 * 0.55;
+  const smoothBlurPx = 6;
+
+  return (
+    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-[#DDD6C8]">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="absolute inset-0 w-full h-full object-cover"
+        style={{ filter: baseFilter, transform: 'scaleX(-1)' }}
+      />
+      {smoothAlpha > 0 && status === 'ready' && (
+        <video
+          autoPlay
+          playsInline
+          muted
+          ref={(el) => {
+            if (el && streamRef.current && el.srcObject !== streamRef.current) {
+              el.srcObject = streamRef.current;
+              el.play().catch(() => {});
+            }
+          }}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          style={{ filter: `${baseFilter} blur(${smoothBlurPx}px)`, opacity: smoothAlpha, transform: 'scaleX(-1)' }}
+        />
+      )}
+
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 bg-black/40">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-[11px] font-sans">Đang mở camera xem trước...</span>
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-white/70 bg-black/50 px-4 text-center">
+          <AlertTriangle className="w-6 h-6" />
+          <span className="text-[11px] font-sans">Chưa cấp quyền camera cho trình duyệt để xem trước.</span>
+        </div>
+      )}
+
+      <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full bg-black/55 text-white text-[9px] font-sans font-bold uppercase tracking-wider">
+        Xem Trước Trực Tiếp
+      </div>
+    </div>
+  );
+};
 
 const THEME_STYLES: Record<
   EventTheme,
@@ -695,6 +810,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     {activeTab === 'storage' && <HardDrive className="w-4 h-4 text-amber-600" />}
                     {activeTab === 'security' && <Shield className="w-4 h-4 text-red-600" />}
                     {activeTab === 'booth_config' && <Sliders className="w-4 h-4 text-blue-600" />}
+                    {activeTab === 'camera_calibration' && <Wand2 className="w-4 h-4 text-teal-600" />}
                   </div>
                   <span className="font-artistic-serif text-sm font-black uppercase tracking-wider text-neutral-900">
                     {activeTab === 'idle_screen' && 'Màn Hình Chờ'}
@@ -703,6 +819,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     {activeTab === 'storage' && 'Quản Lý Ảnh & Bộ Nhớ'}
                     {activeTab === 'security' && 'Bảo Mật & Mã PIN'}
                     {activeTab === 'booth_config' && 'Camera & Thiết Bị'}
+                    {activeTab === 'camera_calibration' && 'Bộ Lọc Camera'}
                   </span>
                 </div>
               )}
@@ -943,6 +1060,35 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-600 text-xs">
                           Máy In
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* WIDGET 7: BỘ LỌC CAMERA (Cân Chỉnh Camera Gốc) */}
+                  <div
+                    onClick={() => setActiveTab('camera_calibration')}
+                    className="p-5 sm:p-6 rounded-2xl bg-white border border-[#DDD6C8] hover:border-teal-500 hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col justify-between group active:scale-[0.98] select-none min-h-[160px] sm:min-h-[180px]"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-teal-50 text-teal-600 border border-teal-100 flex items-center justify-center shadow-2xs group-hover:scale-105 group-hover:bg-teal-600 group-hover:text-white transition-all">
+                        <Wand2 className="w-6 h-6 sm:w-7 sm:h-7" />
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-teal-600 group-hover:translate-x-1 transition-all" />
+                    </div>
+
+                    <div className="mt-4 space-y-1.5">
+                      <div>
+                        <h4 className="font-artistic-serif text-base sm:text-lg font-bold text-neutral-900 group-hover:text-teal-600 transition-colors">
+                          Bộ Lọc Camera
+                        </h4>
+                        <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
+                          Nước ảnh, mịn da & độ nét
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <span className="px-2.5 py-1 rounded-lg bg-teal-100 text-teal-800 text-xs font-semibold">
+                          {CAMERA_CALIBRATION_PRESETS.find((p) => p.id === (tempConfig.cameraCalibration?.presetId || 'natural'))?.name || 'Tùy Chỉnh'}
                         </span>
                       </div>
                     </div>
@@ -2288,6 +2434,138 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* ============================================================== */}
+            {/* TAB MỚI: BỘ LỌC CAMERA (CÂN CHỈNH CAMERA GỐC)                  */}
+            {/* ============================================================== */}
+            {activeTab === 'camera_calibration' && (() => {
+              const calibration = tempConfig.cameraCalibration || DEFAULT_CAMERA_CALIBRATION;
+
+              const applyPreset = (preset: (typeof CAMERA_CALIBRATION_PRESETS)[number]) => {
+                setTempConfig({
+                  ...tempConfig,
+                  cameraCalibration: { presetId: preset.id, ...preset.values },
+                });
+              };
+
+              const updateCalibration = (patch: Partial<CameraCalibrationConfig>) => {
+                setTempConfig({
+                  ...tempConfig,
+                  cameraCalibration: { ...calibration, ...patch, presetId: 'custom' },
+                });
+              };
+
+              const SLIDERS: {
+                key: keyof Omit<CameraCalibrationConfig, 'presetId'>;
+                label: string;
+                icon: React.ComponentType<{ className?: string }>;
+                min: number;
+                max: number;
+                hint: string;
+              }[] = [
+                { key: 'brightness', label: 'Độ Sáng', icon: Sun, min: -50, max: 50, hint: 'Bù sáng cho không gian đèn yếu/tối.' },
+                { key: 'contrast', label: 'Độ Tương Phản', icon: Contrast, min: -50, max: 50, hint: 'Cao hơn = ảnh rõ khối, thấp hơn = ảnh dịu mềm.' },
+                { key: 'saturation', label: 'Độ Bão Hòa Màu', icon: Droplets, min: -50, max: 50, hint: 'Cao hơn = màu rực rỡ, thấp hơn = màu nhẹ nhàng.' },
+                { key: 'warmth', label: 'Tông Ấm / Lạnh', icon: Thermometer, min: -50, max: 50, hint: 'Dương = ấm vàng cam, âm = lạnh xanh.' },
+                { key: 'skinSmooth', label: 'Độ Mịn Da', icon: Feather, min: 0, max: 100, hint: 'Làm mịn nhẹ toàn ảnh, trộn % với ảnh gốc.' },
+                { key: 'sharpen', label: 'Độ Nét', icon: Focus, min: 0, max: 100, hint: 'Tăng nét bù lại cho phần mịn da — chỉ có tác dụng trên ảnh đã chụp.' },
+              ];
+
+              return (
+                <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_1.05fr] gap-6 items-start animate-in fade-in duration-200">
+                  {/* CỘT TRÁI: PRESET DỰNG SẴN + THANH TRƯỢT TINH CHỈNH */}
+                  <div className="space-y-5">
+                    <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-3">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                          1. Chọn Nhanh 1 Kiểu Có Sẵn
+                        </h4>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Áp dụng ngầm lên MỌI ảnh chụp ra, trước cả phong cách lọc màu khách tự chọn.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {CAMERA_CALIBRATION_PRESETS.map((preset) => {
+                          const isSelected = calibration.presetId === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPreset(preset)}
+                              className={`text-left p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'border-teal-500 bg-teal-50 shadow-sm'
+                                  : 'border-neutral-200 bg-white hover:border-neutral-400'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-neutral-900">{preset.name}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-teal-600 shrink-0" />}
+                              </div>
+                              <p className="text-[10px] text-neutral-500 mt-1 leading-snug">{preset.description}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {calibration.presetId === 'custom' && (
+                        <p className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
+                          Đang ở kiểu <strong>Tùy Chỉnh</strong> (đã kéo tay ít nhất 1 thanh bên dưới). Bấm lại 1 trong các kiểu dựng sẵn ở trên để quay về giá trị mặc định.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                          2. Tinh Chỉnh Thêm (Tùy Chọn)
+                        </h4>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          Kéo bất kỳ thanh nào bên dưới sẽ tự chuyển kiểu đang chọn sang "Tùy Chỉnh".
+                        </p>
+                      </div>
+
+                      <div className="space-y-4">
+                        {SLIDERS.map((slider) => {
+                          const Icon = slider.icon;
+                          const value = calibration[slider.key];
+                          return (
+                            <div key={slider.key} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <Icon className="w-3.5 h-3.5 text-teal-600" />
+                                  <span className="text-[11px] font-bold text-neutral-800">{slider.label}</span>
+                                </div>
+                                <span className="text-[11px] font-mono text-neutral-500">
+                                  {value > 0 ? `+${value}` : value}
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min={slider.min}
+                                max={slider.max}
+                                value={value}
+                                onChange={(e) => updateCalibration({ [slider.key]: Number(e.target.value) } as Partial<CameraCalibrationConfig>)}
+                                className="w-full h-1 bg-neutral-200 appearance-none cursor-pointer accent-teal-600 rounded-full"
+                              />
+                              <p className="text-[10px] text-neutral-400">{slider.hint}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CỘT PHẢI: KHUNG XEM TRƯỚC TRỰC TIẾP */}
+                  <div className="space-y-3 lg:sticky lg:top-0">
+                    <CameraCalibrationLivePreview calibration={calibration} selectedCameraId={selectedCameraId} />
+                    <p className="text-[11px] text-neutral-500 leading-relaxed px-1">
+                      Khung xem trước dùng camera mặc định của máy này để minh họa — độ mịn da hiện xấp xỉ, còn độ nét chỉ thấy rõ trên ảnh đã chụp thật (không hiện được ở khung xem trước).
+                      Nhớ bấm nút <strong>"Áp Dụng"</strong> ở góc trên để lưu lại.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Đã bỏ footer Lưu & Áp Dụng riêng — thay bằng 1 nút "Áp Dụng" duy nhất
