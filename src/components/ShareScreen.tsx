@@ -4,7 +4,7 @@ import { FRAME_COLORS, LAYOUT_OPTIONS, FRAME_STYLE_OPTIONS, FILTER_PRESETS, STIC
 import { generatePhotostripCanvas, downloadCanvas } from '../utils/canvas';
 import QRCode from 'qrcode';
 import { uploadPhotoToCloud, isCloudStorageConfigured } from '../utils/cloudStorage';
-import { LayoutIllustration, FrameStyleIllustration } from './VisualPreviews';
+import { FrameStyleIllustration } from './VisualPreviews';
 import { useIsTabletOrLarger } from '../hooks/useIsTabletOrLarger';
 import {
   Download,
@@ -16,9 +16,6 @@ import {
   QrCode,
   RotateCw,
   FlipHorizontal,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   RefreshCw,
   Smile,
   X as XIcon,
@@ -59,8 +56,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   onSetActiveMode,
 }) => {
   const [publicConsent, setPublicConsent] = useState(true);
-  const [layoutCategoryTab, setLayoutCategoryTab] = useState<'double-vert' | 'double-horiz' | 'single-col' | 'editorial' | 'all'>('all');
-  const [layout, setLayout] = useState<StripLayout>(initialLayout);
+  const [layout] = useState<StripLayout>(initialLayout);
   const [columnAlign, setColumnAlign] = useState<'left' | 'center' | 'right'>('left');
   const [frameStyle, setFrameStyle] = useState<FrameStyle>('classic');
   const [frameColor, setFrameColor] = useState<FrameColor>('white');
@@ -230,12 +226,9 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   // thời tận dụng khoảng trống 2 bên tờ in trên màn rộng. Điện thoại (mọi hướng) vẫn giữ 1 cột.
   const isTabletOrLarger = useIsTabletOrLarger();
 
-  // Đánh lại số thứ tự các mục biên tập: mục "Bố Cục Ghép" chỉ hiện ở Chế Độ Chụp Tự Do (nên chiếm
-  // số 1 khi có mặt), các mục còn lại dịch số lên tương ứng khi mục đó bị ẩn. Mục "Tiêu Đề, Ngày In
-  // & Lời Chúc Lưu Bút" đưa lên ngay sau Bố Cục Ghép (nội dung chữ khách gõ xong thấy ngay trên bản
-  // xem trước, nên làm sớm hơn — Kiểu Khung/Màu Giấy là bước tinh chỉnh cuối).
-  const showLayoutSection = eventConfig?.captureMode === 'free';
-  const stepNote = showLayoutSection ? 2 : 1;
+  // Đánh số thứ tự các mục biên tập: mục "Bố Cục Ghép" đã bỏ khỏi màn này ở mọi chế độ (Chụp Tự Do
+  // giờ chọn bố cục ngay trong Thư Viện), nên "Tiêu Đề, Ngày In & Lời Chúc Lưu Bút" luôn là mục số 1.
+  const stepNote = 1;
   const stepFrameStyle = stepNote + 1;
   const stepPaperColor = stepFrameStyle + 1;
   const stepSticker = stepPaperColor + 1;
@@ -967,166 +960,12 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         {/* ==================== CHẾ ĐỘ 1: BIÊN TẬP ==================== */}
         {activeMode === 'edit' && (
           <>
-            {/* Bố Cục Ghép chỉ hiện ở Chế Độ Chụp Tự Do — các chế độ khác đã chọn bố cục từ trước (màn Chọn Bố Cục). */}
-            {eventConfig?.captureMode === 'free' && (
-            <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-4">
-              <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#8C7A5B]"></span>
-                  <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    1. Bố Cục Ghép ({LAYOUT_OPTIONS.length} Kiểu Dàn Trang)
-                  </h3>
-                </div>
-                <span className="text-[10px] font-mono text-[#8C7A5B] font-bold">
-                  {currentLayoutConfig.shortName} • {requiredCount} Ô Ảnh
-                </span>
-              </div>
+            {/* Đã bỏ khối chọn Bố Cục Ghép ở đây — mọi chế độ giờ đều đã chọn bố cục TRƯỚC khi vào
+                Biên Tập (Photobooth/Sự Kiện chọn ở màn Chọn Bố Cục, Chụp Tự Do chọn ngay trong Thư
+                Viện lúc gán ảnh vào ô), nên không cần hỏi lại lần nữa ở đây. */}
 
-              {/* Nếu là Cột Đơn (single-col-*): Tùy chọn Căn Trái / Giữa / Phải */}
-              {(layout === 'single-col-2' || layout === 'single-col-3' || layout === 'single-col-4') && (
-                <div className="flex flex-col gap-2 bg-white/70 p-3 rounded-xl border border-[#1A1A1A]/10">
-                  <span className="text-[10.5px] font-sans font-bold uppercase tracking-wider text-[#1A1A1A]">
-                    Vị Trí Cột Ảnh Trên Tờ Giấy In 4x6:
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      onClick={() => setColumnAlign('left')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'left'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignLeft className="w-3.5 h-3.5" />
-                      <span>Lệch Trái (Viết chữ Phải)</span>
-                    </button>
-                    <button
-                      onClick={() => setColumnAlign('center')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'center'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignCenter className="w-3.5 h-3.5" />
-                      <span>Nằm Ở Giữa</span>
-                    </button>
-                    <button
-                      onClick={() => setColumnAlign('right')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'right'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignRight className="w-3.5 h-3.5" />
-                      <span>Lệch Phải (Viết chữ Trái)</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB DANH MỤC LAYOUT */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-[#1A1A1A]/10">
-                <button
-                  onClick={() => setLayoutCategoryTab('double-vert')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'double-vert'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Dải Đôi Dọc (4x6)
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('double-horiz')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'double-horiz'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Dải Đôi Ngang (6x4)
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('single-col')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'single-col'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Cột Đơn + Lưu Bút
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('editorial')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'editorial'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Bố Cục Mẫu & Bìa
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('all')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'all'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Tất Cả
-                </button>
-              </div>
-
-              {/* GRID CÁC NÚT CHỌN BỐ CỤC (CÓ HÌNH ẢNH MINH HỌA TRỰC QUAN CHO TRẺ EM & NGƯỜI DÙNG) */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {LAYOUT_OPTIONS.filter((l) => {
-                  if (layoutCategoryTab === 'all') return true;
-                  return l.category === layoutCategoryTab;
-                }).map((opt) => {
-                  const isSelected = layout === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => setLayout(opt.id)}
-                      className={`p-2.5 rounded-2xl border flex flex-col items-center text-center transition-all cursor-pointer relative group ${
-                        isSelected
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A] font-bold shadow-md ring-2 ring-[#8C7A5B]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/15 hover:border-[#1A1A1A]/60 hover:bg-white shadow-2xs'
-                      }`}
-                    >
-                      {/* Badge số lượng ảnh */}
-                      <div className="w-full flex items-center justify-between mb-1.5 px-0.5">
-                        <span className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                          isSelected ? 'bg-amber-400 text-black' : 'bg-[#8C7A5B]/15 text-[#8C7A5B]'
-                        }`}>
-                          {opt.photoCount} ảnh
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                      </div>
-
-                      {/* Khung mô phỏng hình ảnh trực quan */}
-                      <div className="py-1 flex items-center justify-center min-h-[96px]">
-                        <LayoutIllustration layoutId={opt.id} isSelected={isSelected} />
-                      </div>
-
-                      {/* Tên bố cục */}
-                      <div className="text-[11px] font-sans font-bold mt-1.5 line-clamp-1">{opt.shortName}</div>
-                      <div className={`text-[8.5px] mt-0.5 leading-tight line-clamp-1 ${isSelected ? 'text-[#F9F7F2]/75' : 'text-[#1A1A1A]/65'}`}>
-                        {opt.description}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-            )}
-
-            {/* KHỐI 6 (ĐƯA LÊN TRƯỚC): TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì
-                nội dung chữ khách tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh
-                chỉnh cuối. */}
+            {/* KHỐI TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì nội dung chữ khách
+                tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh chỉnh cuối. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
                 {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
@@ -2022,166 +1861,12 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         {/* ==================== CHẾ ĐỘ 1: BIÊN TẬP ==================== */}
         {activeMode === 'edit' && (
           <>
-            {/* Bố Cục Ghép chỉ hiện ở Chế Độ Chụp Tự Do — các chế độ khác đã chọn bố cục từ trước (màn Chọn Bố Cục). */}
-            {eventConfig?.captureMode === 'free' && (
-            <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-4">
-              <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#8C7A5B]"></span>
-                  <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    1. Bố Cục Ghép ({LAYOUT_OPTIONS.length} Kiểu Dàn Trang)
-                  </h3>
-                </div>
-                <span className="text-[10px] font-mono text-[#8C7A5B] font-bold">
-                  {currentLayoutConfig.shortName} • {requiredCount} Ô Ảnh
-                </span>
-              </div>
+            {/* Đã bỏ khối chọn Bố Cục Ghép ở đây — mọi chế độ giờ đều đã chọn bố cục TRƯỚC khi vào
+                Biên Tập (Photobooth/Sự Kiện chọn ở màn Chọn Bố Cục, Chụp Tự Do chọn ngay trong Thư
+                Viện lúc gán ảnh vào ô), nên không cần hỏi lại lần nữa ở đây. */}
 
-              {/* Nếu là Cột Đơn (single-col-*): Tùy chọn Căn Trái / Giữa / Phải */}
-              {(layout === 'single-col-2' || layout === 'single-col-3' || layout === 'single-col-4') && (
-                <div className="flex flex-col gap-2 bg-white/70 p-3 rounded-xl border border-[#1A1A1A]/10">
-                  <span className="text-[10.5px] font-sans font-bold uppercase tracking-wider text-[#1A1A1A]">
-                    Vị Trí Cột Ảnh Trên Tờ Giấy In 4x6:
-                  </span>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      onClick={() => setColumnAlign('left')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'left'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignLeft className="w-3.5 h-3.5" />
-                      <span>Lệch Trái (Viết chữ Phải)</span>
-                    </button>
-                    <button
-                      onClick={() => setColumnAlign('center')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'center'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignCenter className="w-3.5 h-3.5" />
-                      <span>Nằm Ở Giữa</span>
-                    </button>
-                    <button
-                      onClick={() => setColumnAlign('right')}
-                      className={`py-2 px-2.5 rounded-lg border text-center font-sans text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        columnAlign === 'right'
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/20'
-                      }`}
-                    >
-                      <AlignRight className="w-3.5 h-3.5" />
-                      <span>Lệch Phải (Viết chữ Trái)</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB DANH MỤC LAYOUT */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-[#1A1A1A]/10">
-                <button
-                  onClick={() => setLayoutCategoryTab('double-vert')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'double-vert'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Dải Đôi Dọc (4x6)
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('double-horiz')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'double-horiz'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Dải Đôi Ngang (6x4)
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('single-col')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'single-col'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Cột Đơn + Lưu Bút
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('editorial')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'editorial'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Bố Cục Mẫu & Bìa
-                </button>
-                <button
-                  onClick={() => setLayoutCategoryTab('all')}
-                  className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer ${
-                    layoutCategoryTab === 'all'
-                      ? 'bg-[#1A1A1A] text-[#F9F7F2]'
-                      : 'bg-[#EFEEE8] text-[#1A1A1A]/70 hover:text-[#1A1A1A]'
-                  }`}
-                >
-                  Tất Cả
-                </button>
-              </div>
-
-              {/* GRID CÁC NÚT CHỌN BỐ CỤC (CÓ HÌNH ẢNH MINH HỌA TRỰC QUAN CHO TRẺ EM & NGƯỜI DÙNG) */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {LAYOUT_OPTIONS.filter((l) => {
-                  if (layoutCategoryTab === 'all') return true;
-                  return l.category === layoutCategoryTab;
-                }).map((opt) => {
-                  const isSelected = layout === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => setLayout(opt.id)}
-                      className={`p-2.5 rounded-2xl border flex flex-col items-center text-center transition-all cursor-pointer relative group ${
-                        isSelected
-                          ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A] font-bold shadow-md ring-2 ring-[#8C7A5B]'
-                          : 'bg-[#F9F7F2] text-[#1A1A1A] border-[#1A1A1A]/15 hover:border-[#1A1A1A]/60 hover:bg-white shadow-2xs'
-                      }`}
-                    >
-                      {/* Badge số lượng ảnh */}
-                      <div className="w-full flex items-center justify-between mb-1.5 px-0.5">
-                        <span className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-mono font-bold ${
-                          isSelected ? 'bg-amber-400 text-black' : 'bg-[#8C7A5B]/15 text-[#8C7A5B]'
-                        }`}>
-                          {opt.photoCount} ảnh
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                      </div>
-
-                      {/* Khung mô phỏng hình ảnh trực quan */}
-                      <div className="py-1 flex items-center justify-center min-h-[96px]">
-                        <LayoutIllustration layoutId={opt.id} isSelected={isSelected} />
-                      </div>
-
-                      {/* Tên bố cục */}
-                      <div className="text-[11px] font-sans font-bold mt-1.5 line-clamp-1">{opt.shortName}</div>
-                      <div className={`text-[8.5px] mt-0.5 leading-tight line-clamp-1 ${isSelected ? 'text-[#F9F7F2]/75' : 'text-[#1A1A1A]/65'}`}>
-                        {opt.description}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-            )}
-
-            {/* KHỐI 6 (ĐƯA LÊN TRƯỚC): TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì
-                nội dung chữ khách tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh
-                chỉnh cuối. */}
+            {/* KHỐI TÙY CHỈNH TIÊU ĐỀ, NGÀY THÁNG & LƯU BÚT GHI CHÚ — làm sớm vì nội dung chữ khách
+                tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh chỉnh cuối. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
                 {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:

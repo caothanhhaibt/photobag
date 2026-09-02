@@ -1,6 +1,18 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { AppScreen, CapturedPhoto, StripLayout } from '../types';
-import { LAYOUT_OPTIONS } from '../constants/filters';
+import { LAYOUT_OPTIONS, LayoutOption } from '../constants/filters';
+import { LayoutIllustration } from './VisualPreviews';
+
+// Danh sách tab lọc theo nhóm bố cục, dùng cho tab "Bố Cục" ở Chế Độ Chụp Tự Do — cùng bộ nhóm với
+// màn Chọn Bố Cục (LayoutSelectionScreen) để khách thấy quen thuộc.
+const LAYOUT_CATEGORY_TABS: { id: LayoutOption['category'] | 'all'; label: string }[] = [
+  { id: 'all', label: 'Tất Cả' },
+  { id: 'classic-strip', label: 'Dải Thẻ Đơn' },
+  { id: 'double-vert', label: 'Bưu Thiếp Dọc' },
+  { id: 'double-horiz', label: 'Bưu Thiếp Ngang' },
+  { id: 'single-col', label: 'Cột Đơn' },
+  { id: 'editorial', label: 'Tạp Chí' },
+];
 
 interface GalleryScreenProps {
   onNavigate: (screen: AppScreen) => void;
@@ -16,6 +28,12 @@ interface GalleryScreenProps {
   onRegisterPrintTrigger?: (triggerFn: () => void) => void;
   // Báo ra ngoài đã gán đủ ô hay chưa, để TopAppBar biết bật/tắt nút "In".
   onUpdateCompletionStatus?: (isComplete: boolean) => void;
+  // Chế độ chụp hiện tại — riêng 'free' (Chụp Tự Do) mới hiện thêm tab "Bố Cục" ở cột trái, vì
+  // Photobooth/Sự Kiện đã chọn bố cục từ trước lúc vào Chọn Bố Cục rồi.
+  captureMode?: 'photobooth' | 'event' | 'free';
+  // Báo ra ngoài khi khách chọn 1 bố cục mới ngay trong Thư Viện (chỉ dùng ở Chế Độ Chụp Tự Do) —
+  // App.tsx lưu lại để làm bố cục thật khi qua màn Chia Sẻ.
+  onSelectLayout?: (layout: StripLayout) => void;
 }
 
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
@@ -26,9 +44,35 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onConfirmSelection,
   onRegisterPrintTrigger,
   onUpdateCompletionStatus,
+  captureMode = 'photobooth',
+  onSelectLayout,
 }) => {
+  const isFreeMode = captureMode === 'free';
+
+  // Cột trái: chỉ Chế Độ Chụp Tự Do mới có 2 tab ("Bố Cục" / "Tất Cả Ảnh"). Vì layout chưa được
+  // chọn từ trước ở chế độ này, mặc định mở ngay tab "Bố Cục" mỗi lần vào Thư Viện — chọn xong sẽ
+  // tự chuyển qua tab ảnh. Photobooth/Sự Kiện đã có bố cục sẵn nên vào thẳng tab ảnh như cũ.
+  const [leftTab, setLeftTab] = useState<'layout' | 'photos'>(() => (isFreeMode ? 'layout' : 'photos'));
+  const [layoutCategoryTab, setLayoutCategoryTab] = useState<LayoutOption['category'] | 'all'>('all');
+
+  // Đánh dấu đã thực sự XÁC NHẬN bố cục chưa — Photobooth/Sự Kiện coi như đã xác nhận sẵn (chọn từ
+  // màn Chọn Bố Cục rồi), riêng Chụp Tự Do phải đợi khách bấm chọn 1 thẻ ở tab "Bố Cục" mới tính,
+  // tránh trường hợp bố cục còn sót lại từ lượt khách trước bị dùng nhầm khi chưa ai chọn gì cả.
+  const [layoutConfirmed, setLayoutConfirmed] = useState<boolean>(!isFreeMode);
+
   const layoutConfig = useMemo(() => LAYOUT_OPTIONS.find((l) => l.id === selectedLayout), [selectedLayout]);
   const requiredCount = layoutConfig ? layoutConfig.photoCount : 3;
+
+  const filteredLayoutOptions = useMemo(
+    () => (layoutCategoryTab === 'all' ? LAYOUT_OPTIONS : LAYOUT_OPTIONS.filter((l) => l.category === layoutCategoryTab)),
+    [layoutCategoryTab]
+  );
+
+  const handleSelectLayoutInGallery = (layoutId: StripLayout) => {
+    onSelectLayout?.(layoutId);
+    setLayoutConfirmed(true);
+    setLeftTab('photos');
+  };
 
   // Số cột hiển thị ở cột hậu kỳ bên phải, theo đúng quy cách của layout đã chọn: dải thẻ đơn /
   // cột đơn = 1 dải dọc duy nhất (đúng thứ tự in từ trên xuống); các layout dải đôi / lưới vuông
@@ -62,7 +106,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   const stagedIdSet = useMemo(() => new Set(staged.filter((id): id is string => !!id)), [staged]);
   const filledCount = staged.filter((id) => !!id).length;
-  const isComplete = filledCount === requiredCount && requiredCount > 0;
+  const isComplete = filledCount === requiredCount && requiredCount > 0 && layoutConfirmed;
 
   // Báo trạng thái hoàn tất ra App.tsx để TopAppBar bật/tắt nút "In" ở góc trên phải.
   useEffect(() => {
@@ -194,59 +238,132 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             className="flex-[2.2] min-h-0 flex flex-col gap-2.5"
           >
             <div className="flex items-center justify-between px-0.5">
-              <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                Tất Cả Ảnh ({capturedPhotos.length})
-              </h3>
+              {isFreeMode ? (
+                <div className="flex items-center gap-1 bg-[#EFEEE8] p-1 rounded-full">
+                  <button
+                    onClick={() => setLeftTab('layout')}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      leftTab === 'layout' ? 'bg-[#1A1A1A] text-[#F9F7F2]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
+                    }`}
+                  >
+                    Bố Cục
+                  </button>
+                  <button
+                    onClick={() => setLeftTab('photos')}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                      leftTab === 'photos' ? 'bg-[#1A1A1A] text-[#F9F7F2]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
+                    }`}
+                  >
+                    Tất Cả Ảnh ({capturedPhotos.length})
+                  </button>
+                </div>
+              ) : (
+                <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                  Tất Cả Ảnh ({capturedPhotos.length})
+                </h3>
+              )}
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-                {sortedPhotos.map((photo) => {
-                  const isStaged = stagedIdSet.has(photo.id);
-                  return (
-                    <div
-                      key={photo.id}
-                      draggable
-                      onDragStart={(e) => handleDragStartLeft(e, photo.id)}
-                      onClick={() => handleLeftPhotoTap(photo.id)}
-                      className={`aspect-square bg-[#1A1A1A] overflow-hidden relative cursor-pointer active:scale-[0.97] transition-transform border-2 ${
-                        isStaged ? 'border-amber-500 ring-2 ring-amber-400/60' : 'border-[#1A1A1A]/10'
-                      }`}
-                    >
-                      <img
-                        src={photo.dataUrl}
-                        alt="Ảnh đã chụp"
-                        className={`w-full h-full object-cover transition-opacity ${isStaged ? 'opacity-50' : ''}`}
-                      />
-
-                      {isStaged && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                          <span className="material-symbols-outlined text-white text-[26px] drop-shadow-md">
-                            check_circle
-                          </span>
-                        </div>
-                      )}
-
+              {isFreeMode && leftTab === 'layout' ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap gap-1.5 px-0.5">
+                    {LAYOUT_CATEGORY_TABS.map((tab) => (
                       <button
-                        onClick={(e) => requestDelete(e, photo.id)}
-                        className="absolute top-1 right-1 w-6 h-6 bg-black/55 hover:bg-red-700 active:bg-red-700 text-white flex items-center justify-center rounded-full shadow-sm transition-colors"
-                        title="Xóa tấm ảnh này"
+                        key={tab.id}
+                        onClick={() => setLayoutCategoryTab(tab.id)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-sans font-bold transition-colors cursor-pointer border ${
+                          layoutCategoryTab === tab.id
+                            ? 'bg-[#1A1A1A] text-[#F9F7F2] border-[#1A1A1A]'
+                            : 'bg-transparent text-[#1A1A1A]/55 border-[#1A1A1A]/15 hover:border-[#1A1A1A]/40'
+                        }`}
                       >
-                        <span className="material-symbols-outlined text-[13px]">close</span>
+                        {tab.label}
                       </button>
-                    </div>
-                  );
-                })}
-              </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {filteredLayoutOptions.map((item) => {
+                      const isSelected = layoutConfirmed && selectedLayout === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleSelectLayoutInGallery(item.id)}
+                          className={`p-2.5 rounded-xl border-2 flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-50 border-amber-500 shadow-xs'
+                              : 'bg-white border-[#1A1A1A]/10 hover:border-[#1A1A1A]/30'
+                          }`}
+                        >
+                          <div className="scale-90 pointer-events-none">
+                            <LayoutIllustration layoutId={item.id} isSelected={isSelected} />
+                          </div>
+                          <span className="text-[10px] font-sans font-bold text-center leading-tight text-[#1A1A1A]">
+                            {item.shortName}
+                          </span>
+                          <span className="text-[9px] font-sans text-[#1A1A1A]/45">{item.photoCount} ảnh</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  {sortedPhotos.map((photo) => {
+                    const isStaged = stagedIdSet.has(photo.id);
+                    return (
+                      <div
+                        key={photo.id}
+                        draggable
+                        onDragStart={(e) => handleDragStartLeft(e, photo.id)}
+                        onClick={() => handleLeftPhotoTap(photo.id)}
+                        className={`aspect-square bg-[#1A1A1A] overflow-hidden relative cursor-pointer active:scale-[0.97] transition-transform border-2 ${
+                          isStaged ? 'border-amber-500 ring-2 ring-amber-400/60' : 'border-[#1A1A1A]/10'
+                        }`}
+                      >
+                        <img
+                          src={photo.dataUrl}
+                          alt="Ảnh đã chụp"
+                          className={`w-full h-full object-cover transition-opacity ${isStaged ? 'opacity-50' : ''}`}
+                        />
+
+                        {isStaged && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                            <span className="material-symbols-outlined text-white text-[26px] drop-shadow-md">
+                              check_circle
+                            </span>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={(e) => requestDelete(e, photo.id)}
+                          className="absolute top-1 right-1 w-6 h-6 bg-black/55 hover:bg-red-700 active:bg-red-700 text-white flex items-center justify-center rounded-full shadow-sm transition-colors"
+                          title="Xóa tấm ảnh này"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">close</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
           {/* CỘT PHẢI (NHỎ HƠN): SỐ Ô CHỜ IN, SẮP THEO ĐÚNG QUY CÁCH CỦA BỐ CỤC ĐÃ CHỌN */}
           <div className="flex-1 min-h-0 flex flex-col gap-2.5 md:max-w-[280px]">
-            <div className="px-0.5">
-              <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                Kéo Ảnh Vào Ô Theo Thứ Tự Để In
-              </h3>
-            </div>
+            {!(isFreeMode && leftTab === 'layout') && (
+              <div className="px-0.5">
+                <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
+                  Kéo Ảnh Vào Ô Theo Thứ Tự Để In
+                </h3>
+              </div>
+            )}
+            {isFreeMode && leftTab === 'layout' ? (
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2 text-[#1A1A1A]/35 px-4 py-10">
+                <span className="material-symbols-outlined text-[36px]">grid_view</span>
+                <p className="text-xs font-sans">Chọn 1 bố cục bên trái để bắt đầu chọn ảnh in.</p>
+              </div>
+            ) : (
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
               <div className={`grid gap-2 ${stagingCols === 1 ? 'grid-cols-1 max-w-[140px] mx-auto md:mx-0' : 'grid-cols-2'}`}>
                 {staged.map((photoId, slotIdx) => {
@@ -281,6 +398,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 })}
               </div>
             </div>
+            )}
           </div>
         </div>
       )}

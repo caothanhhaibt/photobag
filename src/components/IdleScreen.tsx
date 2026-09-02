@@ -611,13 +611,6 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
           </span>
         </div>
 
-        {/* Huy hiệu thông báo Chế Độ Chụp Tự Do đang bật */}
-        {eventConfig.captureMode === 'free' && (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-400/40 text-blue-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>Chế Độ Chụp Tự Do Đang Bật</span>
-          </div>
-        )}
         {displayPhotos.length > 0 && (
           <div className="w-full max-w-2xl flex flex-col items-center">
             {/* Slideshow Photo Preview Cards (Tilt Polaroid style) */}

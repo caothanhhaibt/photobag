@@ -242,6 +242,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const layoutConfig = selectedLayout ? LAYOUT_OPTIONS.find((l) => l.id === selectedLayout) : null;
   const totalSlots = layoutConfig ? layoutConfig.photoCount : (sessionMode === 'single' ? 1 : sessionMode === 'strip-3' ? 3 : 4);
 
+  // Chỉ riêng Chế Độ Sự Kiện mới còn chụp theo "đủ số ảnh của layout thì tự dừng & bật In Nhanh".
+  // Photobooth và Chụp Tự Do đều chụp thoải mái không giới hạn — khách bấm liên tục bao nhiêu tấm
+  // cũng được, không tự dừng, không tự chuyển màn hình; muốn in thì tự bấm vào Thư Viện. Vì vậy 2
+  // chế độ này dùng chung 1 nhánh xử lý với Chụp Tự Do (vốn đã có sẵn cơ chế "chụp không giới hạn"),
+  // và ẩn mọi khung/hiệu ứng hiện "số ảnh cần chụp" trên màn hình chụp.
+  const isUnlimitedCapture = captureMode !== 'event';
+
   // Bắt đầu ghi video quá trình chụp (BTS Video)
   const startBtsRecording = useCallback(() => {
     // Không ghi video khi đang ở chế độ chụp tự do hoặc tính năng bị tắt
@@ -347,7 +354,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
 
     if (countdown !== null) {
       onUpdateShutterLabel('ĐANG ĐẾM...');
-    } else if (isFreeCapture) {
+    } else if (isUnlimitedCapture) {
       if (burstPhotos.length === 0) {
         onUpdateShutterLabel('CHỤP ẢNH');
       } else {
@@ -362,7 +369,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     } else {
       onUpdateShutterLabel('CHỤP ẢNH');
     }
-  }, [countdown, captureTriggerMode, isBurstActive, burstPhotos.length, totalSlots, sessionMode, isFreeCapture, onUpdateShutterLabel]);
+  }, [countdown, captureTriggerMode, isBurstActive, burstPhotos.length, totalSlots, sessionMode, isUnlimitedCapture, onUpdateShutterLabel]);
 
   // Chuyển đổi bộ đếm: 0s -> 3s -> 5s -> 10s
   const handleCycleTimer = () => {
@@ -522,8 +529,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     setBurstPhotos(updated);
     onPhotoCaptured(newPhoto, isFreeCapture ? false : totalBurst > 1);
 
-    // Xử lý riêng cho Chế Độ Chụp Tự Do (Free Capture Mode)
-    if (isFreeCapture) {
+    // Xử lý riêng cho chụp không giới hạn (Chụp Tự Do & Photobooth) — không tự dừng, không tự
+    // chuyển màn hình dù đã chụp đủ số ảnh của layout, khách muốn chụp thêm bao nhiêu cũng được.
+    if (isUnlimitedCapture) {
       setCountdown(null);
       setIsBurstActive(true);
       setCurrentBurstIndex(updated.length);
@@ -569,19 +577,13 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
       // Dừng ghi video và nhận URL video hậu trường
       const videoUrl = await stopBtsRecording();
 
-      if (captureMode === 'event') {
-        // Chế Độ Sự Kiện: dừng lại ở màn hình chụp cho khách xem lại khung xem trước, chờ bấm
-        // "In Nhanh" ở góc trên (qua logo) để xác nhận & qua thẳng Chia Sẻ.
-        onSessionComplete(updated, videoUrl);
-      } else {
-        // Chế Độ Photobooth / Chụp Tự Do: qua Thư Viện để khách tự chọn ảnh đưa vào hậu kỳ.
-        setTimeout(() => {
-          onSessionComplete(updated, videoUrl);
-          onNavigate('gallery');
-        }, 750);
-      }
+      // Nhánh này giờ chỉ còn Chế Độ Sự Kiện đi tới được (Photobooth & Chụp Tự Do đã rẽ ra ở early
+      // return "isUnlimitedCapture" phía trên, không bao giờ "hoàn tất buổi chụp" giữa chừng nữa) —
+      // dừng lại đúng ở màn hình chụp cho khách xem lại khung xem trước, chờ bấm "In Nhanh" ở góc
+      // trên (qua logo) để xác nhận & qua thẳng Chia Sẻ. KHÔNG tự chuyển sang Thư Viện.
+      onSessionComplete(updated, videoUrl);
     }
-  }, [flashEnabled, soundEnabled, captureFrame, currentFilterId, currentFilterIntensity, onPhotoCaptured, onSessionComplete, onNavigate, captureTriggerMode, stopBtsRecording, captureMode]);
+  }, [flashEnabled, soundEnabled, captureFrame, currentFilterId, currentFilterIntensity, onPhotoCaptured, onSessionComplete, captureTriggerMode, stopBtsRecording, isUnlimitedCapture]);
 
   // Chạy chuỗi đếm ngược (Nổi sắc nét trên camera, KHÔNG CÓ LỚP PHỦ MỜ KHUNG ẢNH)
   const runCountdown = useCallback((burstIdx: number, totalBurst: number, collected: CapturedPhoto[]) => {
@@ -637,8 +639,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   const handleShutterTrigger = useCallback(() => {
     if (countdown !== null) return; // Đang trong lúc đếm ngược
 
-    // Trong Chế Độ Chụp Tự Do (Free Capture Mode): Chụp tiếp ảnh mới không giới hạn
-    if (isFreeCapture) {
+    // Chụp không giới hạn (Chụp Tự Do & Photobooth): mỗi lần bấm chụp tiếp 1 tấm mới, không có
+    // tổng số ảnh cố định, không tự dừng.
+    if (isUnlimitedCapture) {
       setIsBurstActive(true);
       const nextIndex = burstPhotos.length;
       setCurrentBurstIndex(nextIndex);
@@ -670,7 +673,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         runCountdown(nextIndex, total, burstPhotos);
       }
     }
-  }, [countdown, sessionMode, captureTriggerMode, isBurstActive, burstPhotos, runCountdown, isFreeCapture, totalSlots]);
+  }, [countdown, sessionMode, captureTriggerMode, isBurstActive, burstPhotos, runCountdown, isUnlimitedCapture, totalSlots]);
 
   const shutterTriggerRef = useRef(handleShutterTrigger);
   shutterTriggerRef.current = handleShutterTrigger;
@@ -868,8 +871,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* CHẾ ĐỘ 1: DẢI Ô NGANG BÊN DƯỚI (FLOATING PHOTO CARDS - KHÔNG BO GÓC, CHUẨN KIOSK THAM KHẢO) - ẨN KHI Ở CHẾ ĐỘ CHỤP TỰ DO */}
-        {!isFreeCapture && previewMode === 'bottom-slots' && (
+        {/* CHẾ ĐỘ 1: DẢI Ô NGANG BÊN DƯỚI (FLOATING PHOTO CARDS - KHÔNG BO GÓC, CHUẨN KIOSK THAM KHẢO) - CHỈ CÒN HIỆN Ở CHẾ ĐỘ SỰ KIỆN (Photobooth & Chụp Tự Do chụp không giới hạn, không hiện số ảnh cần chụp) */}
+        {!isUnlimitedCapture && previewMode === 'bottom-slots' && (
           <div className="absolute left-0 right-0 z-25 flex justify-center pointer-events-none transition-all duration-300 bottom-32 sm:bottom-36 md:bottom-40">
             <div className="pointer-events-auto flex items-center justify-center gap-2.5 sm:gap-3.5 md:gap-4 px-2 max-w-full overflow-x-auto py-1">
               {Array.from({ length: totalSlots }).map((_, index) => {
@@ -925,8 +928,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* CHẾ ĐỘ 2: KHUNG DẢI GIẤY IN TRỰC TIẾP (LIVE PHOTO STRIP PAPER PREVIEW) - ẨN KHI Ở CHẾ ĐỘ CHỤP TỰ DO */}
-        {!isFreeCapture && previewMode === 'paper-strip' && (
+        {/* CHẾ ĐỘ 2: KHUNG DẢI GIẤY IN TRỰC TIẾP (LIVE PHOTO STRIP PAPER PREVIEW) - CHỈ CÒN HIỆN Ở CHẾ ĐỘ SỰ KIỆN */}
+        {!isUnlimitedCapture && previewMode === 'paper-strip' && (
           <div className="absolute top-28 sm:top-32 right-3 sm:right-5 z-25 pointer-events-auto">
             <div
               className={`w-18 sm:w-22 rounded-xl p-1.5 sm:p-2 shadow-[0_12px_40px_rgba(0,0,0,0.65)] border flex flex-col items-center gap-1 sm:gap-1.5 transition-all duration-300 hover:scale-105 select-none ${
@@ -991,8 +994,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           </div>
         )}
 
-        {/* Tiến Trình Chụp Dải Nhiều Ảnh (Khi tắt khung xem trước) */}
-        {previewMode === 'none' && totalBurstCount > 1 && isBurstActive && (
+        {/* Tiến Trình Chụp Dải Nhiều Ảnh (Khi tắt khung xem trước) - CHỈ CÒN HIỆN Ở CHẾ ĐỘ SỰ KIỆN */}
+        {!isUnlimitedCapture && previewMode === 'none' && totalBurstCount > 1 && isBurstActive && (
           <div className="absolute bottom-22 sm:bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
             <div className="pointer-events-auto px-4 py-1.5 bg-black/80 backdrop-blur-md text-[#F9F7F2] text-[11px] font-sans uppercase tracking-widest border border-white/20 rounded-full shadow-lg animate-pulse">
               Đang Chụp: {currentBurstIndex + 1} / {totalBurstCount}

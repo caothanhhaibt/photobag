@@ -174,7 +174,17 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         {currentScreen === 'layout' ? null : currentScreen !== 'camera' ? (
           <button
             id="top-bar-back-to-camera-btn"
-            onClick={() => onNavigate('camera')}
+            onClick={() => {
+              // Riêng Chế Độ Sự Kiện, bấm nút này ở màn Biên Tập/Xuất Bản (Chia Sẻ) sẽ quay về Chọn
+              // Layout thay vì thẳng vào Camera — đúng quy trình "mỗi nhóm khách 1 lượt, chọn layout
+              // riêng cho từng nhóm" để bắt đầu vòng khách mới. Ở màn khác (vd Thư Viện) nút này vẫn
+              // quay lại Camera như bình thường.
+              if (captureMode === 'event' && currentScreen === 'share') {
+                onNavigate('layout');
+              } else {
+                onNavigate('camera');
+              }
+            }}
             className="pointer-events-auto flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
             title="Quay lại chụp ảnh"
           >
