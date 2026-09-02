@@ -13,6 +13,7 @@ import { ShareScreen } from './components/ShareScreen';
 import { LayoutSelectionScreen } from './components/LayoutSelectionScreen';
 import { IdleScreen, DEFAULT_EVENT_CONFIG } from './components/IdleScreen';
 import { AdminDashboardModal, AdminTab } from './components/AdminDashboardModal';
+import { FullscreenToggleButton } from './components/FullscreenToggleButton';
 import { SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, LAYOUT_OPTIONS } from './constants/filters';
 import { AnalyticsStats } from './types';
 import { Clock } from 'lucide-react';
@@ -893,6 +894,11 @@ export default function App() {
         onStartPhonePairing={phoneCameraPairing.startPairing}
         onStopPhonePairing={phoneCameraPairing.stopPairing}
       />
+
+      {/* NÚT TOÀN MÀN HÌNH — nổi ở mọi màn hình, xem chi tiết trong FullscreenToggleButton.tsx.
+          Đặt sau AdminDashboardModal trong cây JSX nhưng z-index thấp hơn (z-40 so với z-50 của
+          modal) nên khi bảng Admin đang mở, nút này tự bị che đi, không lấn giao diện PIN. */}
+      <FullscreenToggleButton />
     </div>
   );
 }
