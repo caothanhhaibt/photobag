@@ -446,7 +446,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     const updatedSec: KioskSecurityConfig = {
       adminPin: newPin,
       enableKioskLock: eventConfig.security?.enableKioskLock ?? false,
-      enableFullScreenKiosk: eventConfig.security?.enableFullScreenKiosk ?? false,
+      enableFullScreenKiosk: eventConfig.security?.enableFullScreenKiosk ?? true,
       hideAdminGearButton: eventConfig.security?.hideAdminGearButton ?? false,
       autoResetAfterShareSeconds: eventConfig.security?.autoResetAfterShareSeconds ?? 45,
     };
@@ -2032,7 +2032,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                             security: {
                               ...(tempConfig.security || {
                                 adminPin: currentAdminPin,
-                                enableFullScreenKiosk: false,
+                                enableFullScreenKiosk: true,
                                 hideAdminGearButton: false,
                                 autoResetAfterShareSeconds: 45,
                               }),
@@ -2067,10 +2067,45 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                               ...(tempConfig.security || {
                                 adminPin: currentAdminPin,
                                 enableKioskLock: true,
-                                enableFullScreenKiosk: false,
+                                enableFullScreenKiosk: true,
                                 autoResetAfterShareSeconds: 45,
                               }),
                               hideAdminGearButton: e.target.checked,
+                            },
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {/* 3. Hiện/ẩn nút nổi "Toàn Màn Hình" cho khách thấy */}
+                  <div className="flex items-center justify-between py-1.5 border-t border-neutral-100">
+                    <div>
+                      <h5 className="text-xs font-bold text-neutral-800">
+                        Hiện Nút Toàn Màn Hình Cho Khách
+                      </h5>
+                      <p className="text-[11px] text-neutral-500">
+                        Nút tròn nhỏ ở góc màn hình để bật/tắt chế độ toàn màn hình (ẩn thanh trình duyệt).
+                        Tắt đi nếu không muốn khách thấy — nhân viên vẫn bật lại được ở đây bất cứ lúc nào.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={tempConfig.security?.enableFullScreenKiosk ?? true}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            security: {
+                              ...(tempConfig.security || {
+                                adminPin: currentAdminPin,
+                                enableKioskLock: true,
+                                hideAdminGearButton: false,
+                                autoResetAfterShareSeconds: 45,
+                              }),
+                              enableFullScreenKiosk: e.target.checked,
                             },
                           })
                         }

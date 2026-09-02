@@ -8,10 +8,17 @@ import { useFullscreen } from '../hooks/useFullscreen';
 //
 // Tự ẩn đi trên iPad/iPhone (Safari) vì trình duyệt đó không hỗ trợ toàn màn hình cho cả trang web —
 // trên iPad cần dùng "Thêm Vào Màn Hình Chính" thay thế (xem hướng dẫn đi kèm khi giao file).
-export const FullscreenToggleButton: React.FC = () => {
+interface FullscreenToggleButtonProps {
+  // Công tắc từ Admin → Bảo Mật & Mã PIN ("Hiện Nút Toàn Màn Hình Cho Khách"). Mặc định true (chưa
+  // từng vào Admin chỉnh thì undefined cũng coi như true) — Admin tắt đi là nút biến mất khỏi màn
+  // hình khách, không liên quan gì tới việc trình duyệt có hỗ trợ toàn màn hình hay không.
+  visible?: boolean;
+}
+
+export const FullscreenToggleButton: React.FC<FullscreenToggleButtonProps> = ({ visible = true }) => {
   const { isFullscreen, isSupported, toggleFullscreen } = useFullscreen();
 
-  if (!isSupported) return null;
+  if (!isSupported || !visible) return null;
 
   return (
     <button

@@ -61,7 +61,7 @@ export const DEFAULT_EVENT_CONFIG: EventConfig = {
   security: {
     adminPin: '1234',
     enableKioskLock: true,
-    enableFullScreenKiosk: false,
+    enableFullScreenKiosk: true,
     hideAdminGearButton: false,
     autoResetAfterShareSeconds: 45,
   },

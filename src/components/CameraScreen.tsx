@@ -612,14 +612,12 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     countdownTimerRef.current = setInterval(() => {
       count -= 1;
       if (count > 0) {
+        // Số cuối cùng (count === 1) tự hiện thành chữ "Chụp!" thay vì số "1" — xem phần render bên
+        // dưới (JSX kiểm tra countdown === 1). Ví dụ hẹn giờ 3 giây: 3 → 2 → Chụp! rồi chụp luôn,
+        // không còn giai đoạn "Cười Lên Nào!" tách riêng như trước (đã bỏ, chụp ngay sau nhịp này).
         setCountdown(count);
         if (soundEnabled) {
           playBeepSound(780, 0.08);
-        }
-      } else if (count === 0) {
-        setCountdown(0); // "CƯỜI LÊN NÀO!"
-        if (soundEnabled) {
-          playBeepSound(1100, 0.12, true);
         }
       } else {
         if (countdownTimerRef.current) {
@@ -627,6 +625,9 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
           countdownTimerRef.current = null;
         }
         setCountdown(null);
+        if (soundEnabled) {
+          playBeepSound(1100, 0.12, true);
+        }
         takeSnapshot(burstIdx, totalBurst, collected);
       }
     }, 1000);
@@ -848,20 +849,22 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
         )}
 
 
-        {/* SỐ ĐẾM NGƯỢC NỔI TRỰC TIẾP TRÊN MÀN HÌNH (KHÔNG CÓ LỚP PHỦ MỜ KHUNG ẢNH - CHUẨN PHOTOBOOTH) */}
+        {/* SỐ ĐẾM NGƯỢC NỔI TRỰC TIẾP TRÊN MÀN HÌNH (KHÔNG CÓ LỚP PHỦ MỜ KHUNG ẢNH - CHUẨN PHOTOBOOTH).
+            Nhịp cuối cùng (countdown === 1) hiện chữ "Chụp!" thay vì số "1", rồi chụp ngay sau đó —
+            không còn giai đoạn "Cười Lên Nào!" tách riêng như trước (đã bỏ theo yêu cầu). */}
         {countdown !== null && (
           <div className="absolute inset-0 flex flex-col items-center justify-center z-40 pointer-events-none select-none">
-            {countdown > 0 ? (
-              <div className="flex flex-col items-center animate-in zoom-in-75 duration-200">
+            <div className="flex flex-col items-center animate-in zoom-in-75 duration-200" key={countdown}>
+              {countdown === 1 ? (
+                <span className="text-[90px] sm:text-[130px] md:text-[160px] leading-none font-serif font-bold italic text-white tracking-wide uppercase drop-shadow-[0_6px_24px_rgba(0,0,0,0.95)]">
+                  Chụp!
+                </span>
+              ) : (
                 <span className="text-[120px] sm:text-[150px] md:text-[190px] leading-none font-serif font-light italic text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.95)]">
                   {countdown}
                 </span>
-              </div>
-            ) : (
-              <div className="text-[36px] sm:text-[50px] md:text-[62px] font-serif italic text-white tracking-widest uppercase drop-shadow-[0_6px_30px_rgba(0,0,0,0.95)] animate-pulse">
-                Cười Lên Nào!
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
