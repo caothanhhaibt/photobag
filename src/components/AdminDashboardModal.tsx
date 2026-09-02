@@ -46,10 +46,6 @@ import {
   History,
   RotateCcw,
   Wand2,
-  Sun,
-  Contrast,
-  Droplets,
-  Thermometer,
   Feather,
   Focus,
 } from 'lucide-react';
@@ -64,10 +60,12 @@ import {
   EventTheme,
   SlotPreviewMode,
   CameraCalibrationConfig,
+  ColorWheelValue,
 } from '../types';
 import { FILTER_PRESETS, CAMERA_CALIBRATION_PRESETS, DEFAULT_CAMERA_CALIBRATION } from '../constants/filters';
-import { buildCalibrationCssFilter } from '../utils/canvas';
+import { applyColorWheelGrading, drawSkinSmoothPass } from '../utils/canvas';
 import { tryEnableContinuousAutofocus } from '../utils/camera';
+import { ColorWheelPicker } from './ColorWheelPicker';
 import type { PairingStatus } from '../hooks/usePhoneCameraPairing';
 import { isCloudStorageConfigured, listCloudObjects, deleteCloudObject, type CloudObjectInfo } from '../utils/cloudStorage';
 
@@ -99,17 +97,27 @@ export type AdminTab = 'idle_screen' | 'capture_settings' | 'analytics' | 'stora
 // ============================================================================
 // KHUNG XEM TRƯỚC TRỰC TIẾP CHO TAB "BỘ LỌC CAMERA" — mở camera riêng của chính nó (độc lập với
 // CameraScreen, vì Admin có thể mở Dashboard này ngay từ Màn Hình Chờ, lúc CameraScreen chưa chạy)
-// để Admin thấy ngay hiệu ứng "Cân Chỉnh Camera Gốc" khi kéo thanh trượt, trước khi bấm Áp Dụng.
-// Chỉ áp dụng phần sáng/tương phản/bão hòa/tông ấm-lạnh + xấp xỉ độ mịn da bằng CSS (rẻ, mượt) —
-// phần tăng nét (sharpen) chỉ có tác dụng thật trên ảnh đã chụp nên không xem trước được ở đây.
+// để Admin thấy ngay hiệu ứng "Cân Chỉnh Camera Gốc" khi kéo bánh xe/thanh trượt, trước khi bấm Áp
+// Dụng. Vẽ lại lên <canvas> ~8fps (đủ mượt cho mắt nhìn, đủ rẻ CPU) trên khung hình đã thu nhỏ, chạy
+// ĐÚNG thuật toán applyColorWheelGrading + drawSkinSmoothPass thật (không còn xấp xỉ CSS filter) —
+// cho kết quả khớp gần như 100% với ảnh chụp thật ra. Riêng "Độ Nét" (sharpen) chỉ có tác dụng thật
+// trên ảnh đã chụp (tốn CPU nếu chạy convolution mỗi khung hình video) nên không xem trước được ở đây.
 // ============================================================================
 const CameraCalibrationLivePreview: React.FC<{
   calibration: CameraCalibrationConfig;
   selectedCameraId?: string | null;
 }> = ({ calibration, selectedCameraId }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const calibrationRef = useRef(calibration);
+  const rafRef = useRef<number | null>(null);
+  const lastDrawRef = useRef(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    calibrationRef.current = calibration;
+  }, [calibration]);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,38 +156,64 @@ const CameraCalibrationLivePreview: React.FC<{
     };
   }, [selectedCameraId]);
 
-  const baseFilter = buildCalibrationCssFilter(calibration);
-  // Xấp xỉ "Độ Mịn Da" cho khung xem trước bằng cách chồng 1 lớp video mờ (blur) lên trên với độ
-  // mờ đục theo %, giống hệt cách sẽ bake vào ảnh chụp thật (xem drawSkinSmoothPass) — chỉ là làm
-  // bằng CSS 2 lớp thay vì vẽ tay trên canvas, cho mượt & rẻ khi hiển thị video trực tiếp.
-  const smoothAlpha = Math.min(100, Math.max(0, calibration.skinSmooth)) / 100 * 0.55;
-  const smoothBlurPx = 6;
+  // Vòng lặp vẽ lại canvas — throttle ~8fps (125ms/khung), thu nhỏ khung hình về 240px ngang trước
+  // khi chạy thuật toán để rẻ CPU, giống hệt công thức "nướng" thật vào ảnh chụp ở captureCalibratedFrame.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const PREVIEW_WIDTH = 240;
+    let stopped = false;
+
+    const draw = (t: number) => {
+      if (stopped) return;
+      rafRef.current = requestAnimationFrame(draw);
+      if (t - lastDrawRef.current < 125) return;
+      lastDrawRef.current = t;
+      if (!video.videoWidth) return;
+
+      const aspect = video.videoHeight / video.videoWidth;
+      const w = PREVIEW_WIDTH;
+      const h = Math.max(1, Math.round(PREVIEW_WIDTH * aspect));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      ctx.save();
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, w, h);
+      ctx.restore();
+
+      const calib = calibrationRef.current;
+      const imageData = ctx.getImageData(0, 0, w, h);
+      applyColorWheelGrading(imageData, calib);
+      ctx.putImageData(imageData, 0, 0);
+      if (calib.skinSmooth > 0) {
+        drawSkinSmoothPass(ctx, canvas, w, h, calib.skinSmooth);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(draw);
+    return () => {
+      stopped = true;
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [status]);
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-[#DDD6C8]">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
+      <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+      <canvas
+        ref={canvasRef}
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ filter: baseFilter, transform: 'scaleX(-1)' }}
+        style={{ imageRendering: 'auto' }}
       />
-      {smoothAlpha > 0 && status === 'ready' && (
-        <video
-          autoPlay
-          playsInline
-          muted
-          ref={(el) => {
-            if (el && streamRef.current && el.srcObject !== streamRef.current) {
-              el.srcObject = streamRef.current;
-              el.play().catch(() => {});
-            }
-          }}
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          style={{ filter: `${baseFilter} blur(${smoothBlurPx}px)`, opacity: smoothAlpha, transform: 'scaleX(-1)' }}
-        />
-      )}
 
       {status === 'loading' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white/70 bg-black/40">
@@ -2455,18 +2489,18 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 });
               };
 
+              const updateWheel = (zone: 'shadows' | 'midtones' | 'highlights', wheelValue: ColorWheelValue) => {
+                updateCalibration({ [zone]: wheelValue } as Partial<CameraCalibrationConfig>);
+              };
+
               const SLIDERS: {
-                key: keyof Omit<CameraCalibrationConfig, 'presetId'>;
+                key: 'skinSmooth' | 'sharpen';
                 label: string;
                 icon: React.ComponentType<{ className?: string }>;
                 min: number;
                 max: number;
                 hint: string;
               }[] = [
-                { key: 'brightness', label: 'Độ Sáng', icon: Sun, min: -50, max: 50, hint: 'Bù sáng cho không gian đèn yếu/tối.' },
-                { key: 'contrast', label: 'Độ Tương Phản', icon: Contrast, min: -50, max: 50, hint: 'Cao hơn = ảnh rõ khối, thấp hơn = ảnh dịu mềm.' },
-                { key: 'saturation', label: 'Độ Bão Hòa Màu', icon: Droplets, min: -50, max: 50, hint: 'Cao hơn = màu rực rỡ, thấp hơn = màu nhẹ nhàng.' },
-                { key: 'warmth', label: 'Tông Ấm / Lạnh', icon: Thermometer, min: -50, max: 50, hint: 'Dương = ấm vàng cam, âm = lạnh xanh.' },
                 { key: 'skinSmooth', label: 'Độ Mịn Da', icon: Feather, min: 0, max: 100, hint: 'Làm mịn nhẹ toàn ảnh, trộn % với ảnh gốc.' },
                 { key: 'sharpen', label: 'Độ Nét', icon: Focus, min: 0, max: 100, hint: 'Tăng nét bù lại cho phần mịn da — chỉ có tác dụng trên ảnh đã chụp.' },
               ];
@@ -2509,7 +2543,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                       </div>
                       {calibration.presetId === 'custom' && (
                         <p className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
-                          Đang ở kiểu <strong>Tùy Chỉnh</strong> (đã kéo tay ít nhất 1 thanh bên dưới). Bấm lại 1 trong các kiểu dựng sẵn ở trên để quay về giá trị mặc định.
+                          Đang ở kiểu <strong>Tùy Chỉnh</strong> (đã chỉnh tay ít nhất 1 bánh xe/thanh bên dưới). Bấm lại 1 trong các kiểu dựng sẵn ở trên để quay về giá trị mặc định.
                         </p>
                       )}
                     </div>
@@ -2517,10 +2551,26 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
-                          2. Tinh Chỉnh Thêm (Tùy Chọn)
+                          2. Bánh Xe Màu 3 Vùng Tông
                         </h4>
                         <p className="text-[11px] text-neutral-500 mt-0.5">
-                          Kéo bất kỳ thanh nào bên dưới sẽ tự chuyển kiểu đang chọn sang "Tùy Chỉnh".
+                          Kiểu Blackmagic/DaVinci Resolve — kéo tâm bánh xe để đẩy màu ngả riêng cho từng vùng, kéo thanh trượt bên dưới mỗi bánh xe để chỉnh riêng độ sáng vùng đó. Bấm đúp vào bánh xe để về giữa (không đẩy màu). Chỉnh xong sẽ tự chuyển kiểu đang chọn sang "Tùy Chỉnh".
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <ColorWheelPicker label="Vùng Tối" value={calibration.shadows} onChange={(v) => updateWheel('shadows', v)} />
+                        <ColorWheelPicker label="Vùng Trung" value={calibration.midtones} onChange={(v) => updateWheel('midtones', v)} />
+                        <ColorWheelPicker label="Vùng Sáng" value={calibration.highlights} onChange={(v) => updateWheel('highlights', v)} />
+                      </div>
+                    </div>
+
+                    <div className="p-5 bg-white rounded-2xl border border-[#DDD6C8] shadow-xs space-y-4">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800">
+                          3. Mịn Da & Độ Nét
+                        </h4>
+                        <p className="text-[11px] text-neutral-500 mt-0.5">
+                          2 thanh này áp dụng chung cho toàn ảnh, không tách theo vùng tông.
                         </p>
                       </div>
 
@@ -2559,7 +2609,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   <div className="space-y-3 lg:sticky lg:top-0">
                     <CameraCalibrationLivePreview calibration={calibration} selectedCameraId={selectedCameraId} />
                     <p className="text-[11px] text-neutral-500 leading-relaxed px-1">
-                      Khung xem trước dùng camera mặc định của máy này để minh họa — độ mịn da hiện xấp xỉ, còn độ nét chỉ thấy rõ trên ảnh đã chụp thật (không hiện được ở khung xem trước).
+                      Khung xem trước dùng camera mặc định của máy này và chạy ĐÚNG thuật toán sẽ áp lên ảnh chụp thật (không còn là ước lượng) — riêng độ nét chỉ thấy rõ trên ảnh đã chụp thật (không hiện được ở khung xem trước vì khá tốn CPU nếu chạy lặp lại mỗi khung hình video).
                       Nhớ bấm nút <strong>"Áp Dụng"</strong> ở góc trên để lưu lại.
                     </p>
                   </div>
