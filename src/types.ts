@@ -49,6 +49,22 @@ export interface CloudStorageConfig {
   uploadToken?: string; // Mã bí mật xác thực với Worker (phải khớp với UPLOAD_TOKEN đã đặt trên Worker)
 }
 
+// Lớp "Cân Chỉnh Camera Gốc" do Admin cấu hình 1 lần cho đúng ánh sáng/camera của buổi chụp — áp
+// dụng NGẦM lên MỌI ảnh chụp ra, trước cả khi tới phong cách lọc màu khách tự chọn (FilterPreset ở
+// dưới). Ví dụ: đèn vàng yếu thì tăng sáng + đẩy tông lạnh lại cho cân; camera điện thoại ám hồng
+// thì giảm bão hòa lại... — chỉnh đúng 1 lần, mọi phong cách lọc phía trên đều đẹp hơn theo.
+// Các giá trị brightness/contrast/saturation/warmth là ĐỘ LỆCH so với gốc (0 = giữ nguyên, dùng
+// cộng vào 100% khi build chuỗi CSS filter), skinSmooth/sharpen là % cường độ (0-100).
+export interface CameraCalibrationConfig {
+  presetId: 'natural' | 'warm-skin' | 'vivid-studio' | 'soft-light' | 'custom';
+  brightness: number; // -50..50
+  contrast: number; // -50..50
+  saturation: number; // -50..50
+  warmth: number; // -50..50 (dương = ấm/vàng cam hơn, âm = lạnh/xanh hơn)
+  skinSmooth: number; // 0-100 — làm mịn nhẹ toàn ảnh rồi trộn % với ảnh gốc (không nhận diện khuôn mặt riêng)
+  sharpen: number; // 0-100 — tăng độ nét bù lại cho phần mịn da, chỉ áp lên ảnh đã chụp (không áp cho khung xem trước trực tiếp)
+}
+
 export interface EventConfig {
   eventName: string;
   eventCategory?: string; // Loại sự kiện (VD: HAPPY WEDDING, HAPPY BIRTHDAY)
@@ -70,6 +86,7 @@ export interface EventConfig {
   photoboothSessionDurationSeconds?: number; // Thời lượng 1 phiên thuê máy cho chế độ 'photobooth' (giây), mặc định 300 (5 phút)
   security?: KioskSecurityConfig;
   cloudStorage?: CloudStorageConfig;
+  cameraCalibration?: CameraCalibrationConfig;
 }
 
 export interface FilterPreset {

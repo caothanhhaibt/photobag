@@ -14,7 +14,7 @@ import { LayoutSelectionScreen } from './components/LayoutSelectionScreen';
 import { IdleScreen, DEFAULT_EVENT_CONFIG } from './components/IdleScreen';
 import { AdminDashboardModal, AdminTab } from './components/AdminDashboardModal';
 import { FullscreenToggleButton } from './components/FullscreenToggleButton';
-import { SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, LAYOUT_OPTIONS } from './constants/filters';
+import { SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, LAYOUT_OPTIONS, DEFAULT_CAMERA_CALIBRATION } from './constants/filters';
 import { AnalyticsStats } from './types';
 import { Clock } from 'lucide-react';
 import { usePhoneCameraPairing } from './hooks/usePhoneCameraPairing';
@@ -785,6 +785,7 @@ export default function App() {
                 captureMode={eventConfig.captureMode}
                 onRegisterQuickPrintTrigger={handleRegisterQuickPrint}
                 onUpdateBurstPhotoCount={setBurstPhotoCountInProgress}
+                cameraCalibration={eventConfig.cameraCalibration ?? DEFAULT_CAMERA_CALIBRATION}
               />
             </div>
           )}
