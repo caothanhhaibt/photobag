@@ -65,6 +65,11 @@ export const DEFAULT_EVENT_CONFIG: EventConfig = {
     hideAdminGearButton: false,
     autoResetAfterShareSeconds: 45,
   },
+  // Điền sẵn địa chỉ Worker mặc định (Cloudflare Worker trung gian lưu ảnh lên R2) — Admin vẫn có
+  // thể tự đổi sang Worker khác của riêng mình trong tab Quản Lý Ảnh & Bộ Nhớ nếu cần.
+  cloudStorage: {
+    workerUrl: 'https://photobag-upload-worker.photobag.workers.dev',
+  },
 };
 
 // Cấu hình tỷ lệ kích thước chữ tiêu đề linh hoạt (Nhỏ / Vừa / Lớn / Cực Đại)

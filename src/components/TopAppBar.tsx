@@ -2,9 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Volume2,
   VolumeX,
-  Camera,
-  RefreshCw,
-  Image as ImageIcon,
   Sliders,
   Sun,
   Grid,
@@ -22,7 +19,6 @@ import {
   Video,
   Film,
   X,
-  ChevronRight,
   Shield,
   Share2,
 } from 'lucide-react';
@@ -36,10 +32,6 @@ interface TopAppBarProps {
   onToggleSound: () => void;
   recordVideoEnabled?: boolean;
   onToggleRecordVideo?: () => void;
-  onFlipCamera?: () => void;
-  onResetSamples?: () => void;
-  isLiveStream?: boolean;
-  onToggleLiveStream?: () => void;
   capturedPhotos?: CapturedPhoto[];
   flashEnabled?: boolean;
   onToggleFlash?: () => void;
@@ -82,10 +74,6 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   onToggleSound,
   recordVideoEnabled = true,
   onToggleRecordVideo,
-  onFlipCamera,
-  onResetSamples,
-  isLiveStream = true,
-  onToggleLiveStream,
   capturedPhotos = [],
   flashEnabled = true,
   onToggleFlash,
@@ -718,36 +706,6 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                 </button>
               )}
 
-              {/* Mục 6: Đổi Camera Trước / Sau */}
-              {onFlipCamera && (
-                <button
-                  onClick={onFlipCamera}
-                  className="w-full px-3 py-2 bg-black/5 hover:bg-black/10 border border-black/5 rounded-xl text-left text-[10.5px] font-sans uppercase tracking-wider text-black/75 flex items-center justify-between transition-colors cursor-pointer font-bold"
-                >
-                  <span className="flex items-center gap-2">
-                    <RefreshCw className="w-3.5 h-3.5 text-[#2563EB]" />
-                    <span className="text-[#1A1A1A]">Đổi Camera (Trước / Sau)</span>
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-black/40" />
-                </button>
-              )}
-
-              {/* Mục 7: Nguồn Ống Kính Webcam / Mẫu */}
-              {onToggleLiveStream && (
-                <button
-                  onClick={onToggleLiveStream}
-                  className="w-full px-3 py-2 bg-black/5 hover:bg-black/10 border border-black/5 rounded-xl text-left text-[10.5px] font-sans uppercase tracking-wider text-black/75 flex items-center justify-between transition-colors cursor-pointer font-bold"
-                >
-                  <span className="flex items-center gap-2">
-                    <Camera className="w-3.5 h-3.5 text-[#2563EB]" />
-                    <span className="text-[#1A1A1A]">Nguồn Ống Kính</span>
-                  </span>
-                  <span className="text-[9px] font-mono font-bold text-[#E86A7C] uppercase">
-                    {isLiveStream ? 'Webcam Live' : 'Ảnh Mẫu'}
-                  </span>
-                </button>
-              )}
-
               {/* Mục 8: Âm thanh màn trập */}
               <button
                 onClick={onToggleSound}
@@ -765,20 +723,6 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                   {soundEnabled ? 'BẬT' : 'TẮT'}
                 </span>
               </button>
-
-              {/* Mục 8: Đặt Lại Ảnh Mẫu Ban Đầu */}
-              {onResetSamples && (
-                <button
-                  onClick={() => {
-                    onResetSamples();
-                    setSettingsOpen(false);
-                  }}
-                  className="w-full px-3 py-2 bg-black/5 hover:bg-black/10 border border-black/5 rounded-xl text-left text-[10px] font-sans uppercase tracking-wider text-black/60 hover:text-black flex items-center gap-2 transition-colors cursor-pointer mt-1 font-bold"
-                >
-                  <ImageIcon className="w-3.5 h-3.5 text-[#8C7A5B]" />
-                  Đặt Lại Dữ Liệu Ảnh Mẫu Ban Đầu
-                </button>
-              )}
 
               {/* Mục 9: Quản Trị Viên & Kiosk Dashboard (Bảo mật bằng PIN) — luôn giữ ở đây để chỉnh nhanh */}
               {onOpenAdminDashboard && (

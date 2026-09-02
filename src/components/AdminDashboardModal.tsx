@@ -295,6 +295,10 @@ interface AdminDashboardModalProps {
   onSetPreviewMode: (mode: SlotPreviewMode) => void;
   selectedCameraId?: string | null;
   onSelectCameraId?: (deviceId: string | null) => void;
+  // Đổi camera trước/sau của thiết bị (vd điện thoại/tablet có 2 camera) — dời từ menu "Tùy Chỉnh"
+  // công khai (khách thấy) vào đây để tránh khách bấm nhầm giữa buổi chụp.
+  cameraFacing?: 'user' | 'environment';
+  onFlipCamera?: () => void;
   // Ghép nối camera điện thoại qua Wifi (PeerJS)
   phonePairingStatus?: PairingStatus;
   phonePairingCode?: string | null;
@@ -329,6 +333,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onSetPreviewMode,
   selectedCameraId = null,
   onSelectCameraId,
+  cameraFacing = 'user',
+  onFlipCamera,
   phonePairingStatus = 'idle',
   phonePairingCode = null,
   phonePairingError = null,
@@ -2374,6 +2380,25 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   <p className="text-[11px] text-neutral-400">
                     Mẹo: nếu máy đang chạy PhotoBag là máy tính (Windows/Mac), có thể dùng app webcam ảo (DroidCam, Iriun Webcam, EpocCam...) rồi chọn tên thiết bị đó ở trên. Nếu máy đang chạy PhotoBag là máy tính bảng, dùng mục "Ghép Camera Điện Thoại Qua Wifi" bên dưới.
                   </p>
+
+                  {onFlipCamera && (
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-neutral-100">
+                      <div>
+                        <p className="text-[11px] font-bold text-neutral-800">Đổi Camera (Trước / Sau)</p>
+                        <p className="text-[10px] text-neutral-400 mt-0.5">
+                          Hữu ích khi máy chụp là điện thoại/tablet có 2 camera. Đang dùng: <strong>{cameraFacing === 'user' ? 'Camera Trước' : 'Camera Sau'}</strong>.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={onFlipCamera}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-[11px] font-bold text-purple-700 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Đổi Camera
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 1.5. Ghép Camera Điện Thoại Qua Wifi (không cần cài phần mềm trên máy chính) */}
