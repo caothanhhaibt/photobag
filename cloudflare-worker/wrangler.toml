@@ -7,10 +7,17 @@ compatibility_date = "2026-08-31"
 binding = "PHOTO_BUCKET"
 bucket_name = "photobag"
 
+# Gắn KV namespace dùng để lưu THỐNG KÊ TỔNG (xem thống kê từ xa, dùng chung cho nhiều máy) — tạo
+# bằng lệnh `wrangler kv namespace create STATS_KV` (xem README.md Bước 8), rồi dán "id" nó trả về
+# vào đây thay cho chuỗi mẫu bên dưới.
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
 # Đổi thành địa chỉ công khai (public) của chính bucket đó — lấy trong Cloudflare Dashboard,
 # mục R2 > (chọn bucket) > Settings > Public Access > địa chỉ dạng https://pub-xxxxxxxx.r2.dev
 [vars]
-PUBLIC_BASE_URL = "https://pub-405efea8b0f94579bcd23a69abe7713c.r2.dev"
+PUBLIC_BASE_URL = "https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"
 
 # LƯU Ý: mã bí mật UPLOAD_TOKEN KHÔNG khai báo ở file này (file này thường được lưu trong Git,
 # không nên chứa bí mật). Đặt nó bằng lệnh: wrangler secret put UPLOAD_TOKEN — xem README.md.

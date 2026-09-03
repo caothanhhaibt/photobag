@@ -37,6 +37,27 @@ Mở file `wrangler.toml` trong thư mục này, sửa 2 chỗ:
 - `bucket_name = "photobag"` → đổi thành đúng tên bucket bạn tạo ở Bước 2.
 - `PUBLIC_BASE_URL = "https://pub-xxxx...r2.dev"` → đổi thành địa chỉ công khai bạn ghi lại ở Bước 2.
 
+## Bước 4.5 — Tạo KV namespace cho THỐNG KÊ TỔNG (xem số liệu từ xa)
+
+Nếu bạn có nhiều máy/nhiều địa điểm dùng chung 1 tài khoản, bước này giúp bạn xem tổng số liệu
+(lượt chụp, ảnh, QR đã chia sẻ, dải ảnh đã xuất) từ xa qua 1 link riêng — không cần đứng tại máy.
+Nếu chỉ có 1 máy và không cần xem từ xa, bạn có thể bỏ qua bước này.
+
+```bash
+wrangler kv namespace create STATS_KV
+```
+
+Lệnh trên in ra 1 đoạn có dạng:
+
+```
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = "abcd1234..."
+```
+
+Mở `wrangler.toml`, tìm dòng `id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"` trong khối `[[kv_namespaces]]`
+và thay bằng `id` thật vừa được in ra.
+
 ## Bước 5 — Đặt mã bí mật xác thực (khuyến khích, để không ai lạ tải/xóa ảnh của bạn được)
 
 ```bash
@@ -65,9 +86,30 @@ Mở app PhotoBag → bấm biểu tượng cài đặt (Admin) → tab **Quản
 
 - **Địa chỉ Worker**: link ở Bước 6.
 - **Mã Token**: chuỗi bạn đặt ở Bước 5.
+- **Mã Tài Khoản Thống Kê** (nếu bạn đã làm Bước 4.5): 1 chuỗi bất kỳ do bạn tự nghĩ ra, dùng để
+  gộp số liệu của nhiều máy vào cùng 1 chỗ — CHÍNH chuỗi này cũng là "mã bí mật" để xem link thống
+  kê ở bước dưới, nên đặt dài & khó đoán, ví dụ `shop1-stats-k7m2x9`. Nếu có nhiều máy/nhiều địa
+  điểm, nhập **CÙNG MỘT chuỗi này** trên tất cả các máy để số liệu cộng chung vào 1 nơi.
 
 Bấm **Áp Dụng**. Từ giờ, mỗi khi khách chụp xong và bấm sang màn Xuất Bản, ảnh sẽ tự động tải lên
-và mã QR sẽ là link thật tới ảnh đó.
+và mã QR sẽ là link thật tới ảnh đó. Đồng thời app cũng âm thầm gửi số liệu (lượt chụp, ảnh, QR đã
+chia sẻ, dải ảnh đã xuất) lên Worker mỗi khi các sự kiện đó xảy ra — không ảnh hưởng gì tới trải
+nghiệm của khách kể cả khi máy đang mất mạng (sẽ tự bỏ qua, không báo lỗi cho khách thấy).
+
+## Xem Thống Kê Tổng Từ Xa (không cần đứng tại máy)
+
+Nếu bạn đã làm Bước 4.5 và nhập **Mã Tài Khoản Thống Kê** ở trên, mở trình duyệt bất kỳ (điện
+thoại, máy tính, ở đâu cũng được) và vào link:
+
+```
+https://<Địa chỉ Worker của bạn>/stats-page?key=<Mã Tài Khoản Thống Kê>
+```
+
+Ví dụ: `https://photobag-upload-worker.ten-tai-khoan.workers.dev/stats-page?key=shop1-stats-k7m2x9`
+
+Trang này hiện tổng số liệu cộng dồn từ TẤT CẢ các máy đang dùng chung mã tài khoản đó, tự làm mới
+mỗi 30 giây. Bạn có thể lưu link này lại (bookmark) để xem lại bất cứ lúc nào — không cần đăng
+nhập, ai có đúng link mới xem được, vì vậy đừng chia sẻ link này cho người ngoài.
 
 ## Khi tài khoản đầy dung lượng, hoặc chuyển giao cho chủ cửa hàng khác
 
