@@ -82,3 +82,38 @@ export async function deleteCloudObject(config: CloudStorageConfig, key: string)
     throw new Error(`Xóa ảnh trên đám mây thất bại (mã lỗi ${res.status}).`);
   }
 }
+
+// Các sự kiện thống kê có thể cộng dồn lên Worker (xem POST /stats/increment trong worker.js) —
+// mỗi field là SỐ LƯỢNG CẦN CỘNG THÊM, không phải tổng mới.
+export interface StatsEventDeltas {
+  sessions?: number;
+  photos?: number;
+  qrShares?: number;
+  exports?: number;
+}
+
+/**
+ * Gửi số liệu thống kê (lượt chụp, ảnh, QR đã chia sẻ, dải ảnh đã xuất) lên Worker để gộp vào
+ * THỐNG KÊ TỔNG dùng chung cho nhiều máy — xem README.md phần "Xem Thống Kê Tổng Từ Xa". Đây là
+ * lệnh gọi "âm thầm, không quan trọng bằng trải nghiệm khách": luôn tự nuốt lỗi (mất mạng, Worker
+ * chưa cấu hình, chưa đặt Mã Tài Khoản Thống Kê...) chứ KHÔNG throw ra ngoài, để không bao giờ làm
+ * gián đoạn luồng chụp/in/chia sẻ thật của khách chỉ vì thống kê gửi lên thất bại.
+ */
+export async function postStatsEvent(config: CloudStorageConfig | undefined, deltas: StatsEventDeltas): Promise<void> {
+  try {
+    if (!config || !isCloudStorageConfigured(config)) return;
+    const accountKey = config.statsAccountKey?.trim();
+    if (!accountKey) return;
+    const base = normalizeBase(config.workerUrl!);
+    await fetch(`${base}/stats/increment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(config),
+      },
+      body: JSON.stringify({ accountKey, ...deltas }),
+    });
+  } catch {
+    // Âm thầm bỏ qua — thống kê từ xa không được phép làm gián đoạn trải nghiệm khách.
+  }
+}
