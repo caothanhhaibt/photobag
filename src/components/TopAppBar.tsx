@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { AppScreen, CapturedPhoto, SlotPreviewMode, CaptureTriggerMode, CaptureMode } from '../types';
 import { FILTER_PRESETS } from '../constants/filters';
+import { Language, TranslationKey } from '../i18n/translations';
+import { LanguageToggle } from './LanguageToggle';
 
 interface TopAppBarProps {
   currentScreen: AppScreen;
@@ -64,6 +66,9 @@ interface TopAppBarProps {
   // góc trên trái (đã chuyển từ nằm trong ShareScreen ra đây để nhất quán với các màn khác).
   shareActiveMode?: 'edit' | 'export';
   onSetShareActiveMode?: (mode: 'edit' | 'export') => void;
+  language: Language;
+  t: (key: TranslationKey) => string;
+  onChangeLanguage: (language: Language) => void;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
@@ -101,6 +106,9 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
   galleryPrintReady = false,
   shareActiveMode = 'edit',
   onSetShareActiveMode,
+  language,
+  t,
+  onChangeLanguage,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Bảng Tùy Chỉnh giờ chỉ mở được ở giao diện chụp ảnh, kích hoạt bằng cách bấm vào logo (xem khối
@@ -173,17 +181,17 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
               }
             }}
             className="pointer-events-auto flex items-center gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-[10px] sm:text-xs uppercase tracking-[0.2em] font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
-            title="Quay lại chụp ảnh"
+            title={t('topbar_backToCamera')}
           >
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">add_a_photo</span>
-            <span>Chụp Ảnh</span>
+            <span>{t('topbar_takePhotoLabel')}</span>
           </button>
         ) : (
           <div
             id="top-bar-photo-stack-gallery"
             onClick={handleToggleGallery}
             className="pointer-events-auto group cursor-pointer relative flex items-center transition-all duration-300 active:scale-95"
-            title={`Mở Thư Viện Kỷ Niệm (${photoCount} ảnh)`}
+            title={`${t('topbar_openGallery')} (${photoCount} ${t('gallery_photoCountSuffix')})`}
           >
             {/* Chồng 3 bức ảnh Polaroid xếp nghiêng nghệ thuật (Không hộp nền) */}
             <div className="relative w-11 sm:w-13 h-11 sm:h-13">
@@ -255,7 +263,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         ref={logoRef}
         onClick={handleLogoClick}
         className="pointer-events-auto cursor-pointer flex items-center gap-2 sm:gap-2.5 transition-transform duration-200 active:scale-95 group"
-        title={currentScreen === 'camera' ? 'Tùy chỉnh chức năng phụ' : 'Quay lại chụp ảnh'}
+        title={currentScreen === 'camera' ? t('topbar_settingsTooltip') : t('topbar_backToCamera')}
       >
         {/* Icon Chiếc Cặp Học Sinh Nhật Bản (Randoseru Trắng Nắp Xanh) Gắn Máy Ảnh */}
         <div className="relative w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 drop-shadow-[0_4px_10px_rgba(0,0,0,0.6)]">
@@ -341,7 +349,10 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
       </div>
 
       {/* 3. GÓC PHẢI: WIDGET THEO CHẾ ĐỘ CHỤP (chỉ hiện ở giao diện chụp ảnh) + BẢNG TÙY CHỈNH */}
-      <div className="relative pointer-events-auto min-w-[40px] flex justify-end" ref={rightCornerRef}>
+      <div className="relative pointer-events-auto min-w-[40px] flex items-center gap-2 justify-end" ref={rightCornerRef}>
+        {/* Chuyển đổi ngôn ngữ VI/EN — luôn hiện xuyên suốt phiên chụp, không chỉ ở màn hình chờ */}
+        <LanguageToggle language={language} onChangeLanguage={onChangeLanguage} className="text-white" />
+
         {currentScreen === 'camera' && (
           <>
             {/* Chế Độ Sự Kiện: nút In Nhanh — lấy đủ ảnh ở khung xem trước hiện tại, qua thẳng Chia Sẻ */}
@@ -355,10 +366,10 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                     ? 'bg-[#E86A7C] hover:bg-[#D8566A] text-white border-white/40 cursor-pointer'
                     : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
                 }`}
-                title="In nhanh & chuyển sang Chia Sẻ"
+                title={t('topbar_quickPrint')}
               >
                 <span className="material-symbols-outlined text-[16px] sm:text-[18px]">bolt</span>
-                <span>In Nhanh{burstPhotoCount ? ` (${burstPhotoCount})` : ''}</span>
+                <span>{t('topbar_quickPrintLabel')}{burstPhotoCount ? ` (${burstPhotoCount})` : ''}</span>
               </button>
             )}
 
@@ -366,7 +377,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
             {captureMode === 'photobooth' && remainingClamped !== null && (
               <div
                 className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/25 text-[#F9F7F2] shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
-                title="Thời gian còn lại của phiên"
+                title={t('topbar_sessionTimeLeft')}
               >
                 <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-amber-300">schedule</span>
                 <span className="font-mono text-xs sm:text-sm font-bold tracking-wider">
@@ -391,10 +402,10 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
                 ? 'bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] border-white/20 cursor-pointer'
                 : 'bg-black/40 text-white/40 border-white/10 cursor-not-allowed'
             }`}
-            title="In dải ảnh đã gán đủ ô"
+            title={t('topbar_printReady')}
           >
             <span className="material-symbols-outlined text-[16px] sm:text-[18px]">print</span>
-            <span>In</span>
+            <span>{t('topbar_printLabel')}</span>
           </button>
         )}
 
@@ -412,7 +423,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
               }`}
             >
               <Sliders className="w-3 h-3" />
-              <span className="hidden sm:inline">Biên Tập</span>
+              <span className="hidden sm:inline">{t('topbar_editLabel')}</span>
             </button>
             <button
               id="top-bar-share-export-btn"
@@ -424,7 +435,7 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
               }`}
             >
               <Share2 className="w-3 h-3" />
-              <span className="hidden sm:inline">Xuất Bản</span>
+              <span className="hidden sm:inline">{t('topbar_exportLabel')}</span>
             </button>
           </div>
         )}

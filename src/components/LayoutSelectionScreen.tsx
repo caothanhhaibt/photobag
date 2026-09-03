@@ -3,6 +3,7 @@ import { AppScreen, StripLayout, EventConfig } from '../types';
 import { LAYOUT_OPTIONS } from '../constants/filters';
 import { LayoutIllustration } from './VisualPreviews';
 import { playSuccessChime } from '../utils/audio';
+import { Language, TranslationKey } from '../i18n/translations';
 import { motion, AnimatePresence, PanInfo } from 'motion/react';
 import {
   ChevronLeft,
@@ -22,38 +23,40 @@ interface LayoutSelectionScreenProps {
   onStartCapture: (layout: StripLayout) => void;
   eventConfig: EventConfig;
   soundEnabled: boolean;
+  language: Language;
+  t: (key: TranslationKey) => string;
 }
 
 interface LayoutGroup {
   id: string;
-  title: string;
+  titleKey: TranslationKey;
   icon: React.ElementType;
 }
 
 const LAYOUT_GROUPS: LayoutGroup[] = [
   {
     id: 'classic-strip',
-    title: 'Dải Thẻ Đơn',
+    titleKey: 'layout_group_classicStrip',
     icon: Bookmark,
   },
   {
     id: 'double-vert',
-    title: 'Bưu Thiếp Dọc',
+    titleKey: 'layout_group_doubleVert',
     icon: Columns,
   },
   {
     id: 'double-horiz',
-    title: 'Bưu Thiếp Ngang',
+    titleKey: 'layout_group_doubleHoriz',
     icon: Rows,
   },
   {
     id: 'single-col',
-    title: 'Cột Đơn + Vùng Lời Chúc',
+    titleKey: 'layout_group_singleCol',
     icon: Heart,
   },
   {
     id: 'editorial',
-    title: 'Tạp Chí & Kỷ Niệm',
+    titleKey: 'layout_group_editorial',
     icon: Grid2X2,
   },
 ];
@@ -65,6 +68,8 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
   onStartCapture,
   eventConfig,
   soundEnabled,
+  language,
+  t,
 }) => {
   // Mặc định luôn bắt đầu từ nhóm Dải Thẻ Đơn (index 0)
   const [activeGroupIndex, setActiveGroupIndex] = useState<number>(0);
@@ -145,7 +150,7 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
       {/* 1. Header Section */}
       <div className="w-full max-w-6xl mx-auto border-b border-[#1A1A1A]/10 pb-3 sm:pb-4 flex items-center justify-between gap-4">
         <h1 className="font-editorial-serif text-2xl sm:text-3xl md:text-4xl font-normal text-neutral-900 tracking-tight">
-          Chọn Kiểu Bố Cục
+          {t('layout_title')}
         </h1>
 
         {/* Phone-Style Pagination Dots (Chuyển trang vô cực, không viền ngoài) */}
@@ -156,7 +161,7 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
               <button
                 key={group.id}
                 onClick={() => goToGroup(idx)}
-                aria-label={`Chuyển đến ${group.title}`}
+                aria-label={`${t('layout_switchTo')} ${t(group.titleKey)}`}
                 className="p-1 cursor-pointer flex items-center justify-center focus:outline-none transition-transform active:scale-90"
               >
                 <div
@@ -179,7 +184,7 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
             <GroupIcon className="w-5 h-5" />
           </div>
           <h2 className="text-base sm:text-lg font-bold text-neutral-900">
-            {currentGroup.title}
+            {t(currentGroup.titleKey)}
           </h2>
         </div>
 
@@ -188,14 +193,14 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
           <button
             onClick={prevGroup}
             className="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer bg-white hover:bg-neutral-100 border border-[#DDD6C8] text-neutral-700 shadow-2xs active:scale-95"
-            title="Nhóm trước (Vuốt phải)"
+            title={t('layout_prevGroup')}
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={nextGroup}
             className="w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer bg-white hover:bg-neutral-100 border border-[#DDD6C8] text-neutral-700 shadow-2xs active:scale-95"
-            title="Nhóm tiếp theo (Vuốt trái)"
+            title={t('layout_nextGroup')}
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -276,7 +281,7 @@ export const LayoutSelectionScreen: React.FC<LayoutSelectionScreenProps> = ({
 
           {/* Nhãn chữ nổi BẮT ĐẦU */}
           <span className="mt-1 text-[9px] sm:text-[10px] font-sans uppercase tracking-[0.2em] whitespace-nowrap px-2.5 py-0.5 rounded-full bg-[#1A1A1A] text-[#F9F7F2] font-bold shadow-xs group-hover:bg-[#2563EB] transition-colors">
-            BẮT ĐẦU
+            {t('layout_start')}
           </span>
         </motion.button>
       </div>

@@ -48,6 +48,8 @@ import {
   Wand2,
   Feather,
   Focus,
+  Link as LinkIcon,
+  Copy,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -389,6 +391,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const [cloudObjectsStatus, setCloudObjectsStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [cloudObjectsError, setCloudObjectsError] = useState<string | null>(null);
   const [deletingCloudKey, setDeletingCloudKey] = useState<string | null>(null);
+  const [statsLinkCopied, setStatsLinkCopied] = useState<boolean>(false);
 
   const refreshCloudObjects = async () => {
     if (!isCloudStorageConfigured(eventConfig.cloudStorage)) return;
@@ -1885,11 +1888,66 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                         className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs font-mono text-neutral-800 focus:outline-purple-400"
                       />
                     </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+                        Mã Tài Khoản Thống Kê (tùy chọn)
+                      </label>
+                      <input
+                        type="text"
+                        value={tempConfig.cloudStorage?.statsAccountKey || ''}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            cloudStorage: { ...(tempConfig.cloudStorage || {}), statsAccountKey: e.target.value },
+                          })
+                        }
+                        placeholder="Tự nghĩ 1 chuỗi bí mật, vd: shop1-stats-k7m2x9"
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs font-mono text-neutral-800 focus:outline-purple-400"
+                      />
+                      <p className="text-[10.5px] text-neutral-500 mt-1">
+                        Nhập <strong>cùng 1 mã này</strong> trên mọi máy dùng chung tài khoản cho thuê để gộp
+                        chung thống kê tổng (lượt chụp, ảnh, QR đã chia sẻ, dải ảnh đã xuất) — xem được từ xa
+                        mà không cần đứng tại máy. Để trống nếu chỉ có 1 máy và không cần xem từ xa.
+                      </p>
+                    </div>
                   </div>
 
                   <p className="text-[10px] text-neutral-400">
-                    Nhớ bấm nút <strong>"Áp Dụng"</strong> ở góc trên để lưu lại 2 ô trên.
+                    Nhớ bấm nút <strong>"Áp Dụng"</strong> ở góc trên để lưu lại các ô trên.
                   </p>
+
+                  {/* Link xem thống kê tổng từ xa — chỉ hiện khi đã có đủ Địa Chỉ Worker + Mã Tài Khoản Thống
+                      Kê (dùng cấu hình ĐÃ ÁP DỤNG, giống khối "Ảnh Đã Lưu" bên dưới) */}
+                  {isCloudStorageConfigured(eventConfig.cloudStorage) && eventConfig.cloudStorage?.statsAccountKey?.trim() && (
+                    <div className="pt-2 border-t border-purple-200/70 space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <LinkIcon className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+                          Link Xem Thống Kê Từ Xa
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-neutral-500">
+                        Mở link này trên điện thoại hoặc máy tính bất kỳ để xem tổng số liệu — không cần
+                        đứng tại máy, không cần đăng nhập. Đừng chia sẻ link này cho người ngoài.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const link = `${eventConfig.cloudStorage!.workerUrl!.trim().replace(/\/+$/, '')}/stats-page?key=${encodeURIComponent(
+                            eventConfig.cloudStorage!.statsAccountKey!.trim()
+                          )}`;
+                          navigator.clipboard.writeText(link).then(() => {
+                            setStatsLinkCopied(true);
+                            setTimeout(() => setStatsLinkCopied(false), 2500);
+                          });
+                        }}
+                        className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      >
+                        {statsLinkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        {statsLinkCopied ? 'Đã Sao Chép!' : 'Sao Chép Link Thống Kê'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Danh sách ảnh đã lưu trên đám mây (dùng cấu hình ĐÃ ÁP DỤNG, không phải ô đang gõ) */}
                   {isCloudStorageConfigured(eventConfig.cloudStorage) && (

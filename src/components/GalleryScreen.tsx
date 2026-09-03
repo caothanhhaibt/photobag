@@ -2,16 +2,17 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { AppScreen, CapturedPhoto, StripLayout } from '../types';
 import { LAYOUT_OPTIONS, LayoutOption } from '../constants/filters';
 import { LayoutIllustration } from './VisualPreviews';
+import { Language, TranslationKey } from '../i18n/translations';
 
 // Danh sách tab lọc theo nhóm bố cục, dùng cho tab "Bố Cục" ở Chế Độ Chụp Tự Do — cùng bộ nhóm với
 // màn Chọn Bố Cục (LayoutSelectionScreen) để khách thấy quen thuộc.
-const LAYOUT_CATEGORY_TABS: { id: LayoutOption['category'] | 'all'; label: string }[] = [
-  { id: 'all', label: 'Tất Cả' },
-  { id: 'classic-strip', label: 'Dải Thẻ Đơn' },
-  { id: 'double-vert', label: 'Bưu Thiếp Dọc' },
-  { id: 'double-horiz', label: 'Bưu Thiếp Ngang' },
-  { id: 'single-col', label: 'Cột Đơn' },
-  { id: 'editorial', label: 'Tạp Chí' },
+const LAYOUT_CATEGORY_TABS: { id: LayoutOption['category'] | 'all'; labelKey: TranslationKey }[] = [
+  { id: 'all', labelKey: 'gallery_catAll' },
+  { id: 'classic-strip', labelKey: 'gallery_catClassicStrip' },
+  { id: 'double-vert', labelKey: 'gallery_catDoubleVert' },
+  { id: 'double-horiz', labelKey: 'gallery_catDoubleHoriz' },
+  { id: 'single-col', labelKey: 'gallery_catSingleCol' },
+  { id: 'editorial', labelKey: 'gallery_catEditorial' },
 ];
 
 interface GalleryScreenProps {
@@ -34,6 +35,8 @@ interface GalleryScreenProps {
   // Báo ra ngoài khi khách chọn 1 bố cục mới ngay trong Thư Viện (chỉ dùng ở Chế Độ Chụp Tự Do) —
   // App.tsx lưu lại để làm bố cục thật khi qua màn Chia Sẻ.
   onSelectLayout?: (layout: StripLayout) => void;
+  language: Language;
+  t: (key: TranslationKey) => string;
 }
 
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
@@ -46,6 +49,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onUpdateCompletionStatus,
   captureMode = 'photobooth',
   onSelectLayout,
+  language,
+  t,
 }) => {
   const isFreeMode = captureMode === 'free';
 
@@ -230,12 +235,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       {capturedPhotos.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20 text-center text-[#1A1A1A]/50">
           <span className="material-symbols-outlined text-[48px]">photo_library</span>
-          <p className="text-sm font-sans">Chưa có tấm ảnh nào được chụp.</p>
+          <p className="text-sm font-sans">{t('gallery_noPhotosYet')}</p>
           <button
             onClick={() => onNavigate('camera')}
             className="mt-2 px-5 py-2.5 bg-[#1A1A1A] text-[#F9F7F2] font-sans text-xs uppercase tracking-[0.2em] hover:bg-[#8C7A5B] transition-all"
           >
-            Chụp Ảnh Ngay
+            {t('common_takePhotoNow')}
           </button>
         </div>
       ) : (
@@ -255,7 +260,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       leftTab === 'layout' ? 'bg-[#1A1A1A] text-[#F9F7F2]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
                     }`}
                   >
-                    Bố Cục
+                    {t('gallery_tabLayout')}
                   </button>
                   <button
                     onClick={() => setLeftTab('photos')}
@@ -263,12 +268,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       leftTab === 'photos' ? 'bg-[#1A1A1A] text-[#F9F7F2]' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'
                     }`}
                   >
-                    Tất Cả Ảnh ({capturedPhotos.length})
+                    {t('gallery_tabAllPhotos')} ({capturedPhotos.length})
                   </button>
                 </div>
               ) : (
                 <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                  Tất Cả Ảnh ({capturedPhotos.length})
+                  {t('gallery_tabAllPhotos')} ({capturedPhotos.length})
                 </h3>
               )}
             </div>
@@ -286,7 +291,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                             : 'bg-transparent text-[#1A1A1A]/55 border-[#1A1A1A]/15 hover:border-[#1A1A1A]/40'
                         }`}
                       >
-                        {tab.label}
+                        {t(tab.labelKey)}
                       </button>
                     ))}
                   </div>
@@ -309,7 +314,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           <span className="text-[10px] font-sans font-bold text-center leading-tight text-[#1A1A1A]">
                             {item.shortName}
                           </span>
-                          <span className="text-[9px] font-sans text-[#1A1A1A]/45">{item.photoCount} ảnh</span>
+                          <span className="text-[9px] font-sans text-[#1A1A1A]/45">{item.photoCount} {t('gallery_photoCountSuffix')}</span>
                         </button>
                       );
                     })}
@@ -346,7 +351,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         <button
                           onClick={(e) => requestDelete(e, photo.id)}
                           className="absolute top-1 right-1 w-6 h-6 bg-black/55 hover:bg-red-700 active:bg-red-700 text-white flex items-center justify-center rounded-full shadow-sm transition-colors"
-                          title="Xóa tấm ảnh này"
+                          title={t('gallery_deleteThisPhoto')}
                         >
                           <span className="material-symbols-outlined text-[13px]">close</span>
                         </button>
@@ -366,14 +371,14 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             {!(isFreeMode && leftTab === 'layout') && (
               <div className="px-0.5">
                 <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                  Kéo Ảnh Vào Ô Theo Thứ Tự Để In
+                  {t('gallery_dragInstructions')}
                 </h3>
               </div>
             )}
             {isFreeMode && leftTab === 'layout' ? (
               <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2 text-[#1A1A1A]/35 px-4 py-10">
                 <span className="material-symbols-outlined text-[36px]">grid_view</span>
-                <p className="text-xs font-sans">Chọn 1 bố cục bên trái để bắt đầu chọn ảnh in.</p>
+                <p className="text-xs font-sans">{t('gallery_chooseLayoutFirst')}</p>
               </div>
             ) : (
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
@@ -393,7 +398,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           ? 'bg-[#1A1A1A] cursor-pointer active:scale-[0.97]'
                           : 'bg-[#EFEEE8] border-2 border-dashed border-[#1A1A1A]/20 flex items-center justify-center'
                       }`}
-                      title={photo ? 'Bấm để bỏ ảnh này ra' : `Ô #${slotIdx + 1} còn trống`}
+                      title={photo ? t('gallery_tapToRemove') : `${t('gallery_slotLabel')} #${slotIdx + 1} ${t('gallery_slotEmptySuffix')}`}
                     >
                       {photo ? (
                         <>
@@ -422,20 +427,20 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             <div className="w-16 h-16 rounded-lg overflow-hidden border border-black/10">
               <img src={pendingDeletePhoto.dataUrl} alt="Ảnh sắp xóa" className="w-full h-full object-cover" />
             </div>
-            <p className="text-sm font-sans font-bold text-[#1A1A1A]">Xóa tấm ảnh này?</p>
-            <p className="text-xs font-sans text-[#1A1A1A]/60 -mt-1.5">Không thể hoàn tác sau khi xóa.</p>
+            <p className="text-sm font-sans font-bold text-[#1A1A1A]">{t('gallery_deleteConfirmTitle')}</p>
+            <p className="text-xs font-sans text-[#1A1A1A]/60 -mt-1.5">{t('gallery_deleteConfirmSubtitle')}</p>
             <div className="w-full flex items-center gap-2 mt-1">
               <button
                 onClick={() => setPendingDeleteId(null)}
                 className="flex-1 py-2.5 rounded-xl bg-black/5 hover:bg-black/10 text-[#1A1A1A] text-xs font-sans font-bold uppercase tracking-wider transition-colors cursor-pointer"
               >
-                Hủy
+                {t('common_cancel')}
               </button>
               <button
                 onClick={confirmDelete}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-sans font-bold uppercase tracking-wider transition-colors cursor-pointer"
               >
-                Xóa
+                {t('common_delete')}
               </button>
             </div>
           </div>

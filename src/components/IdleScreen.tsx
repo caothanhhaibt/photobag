@@ -28,6 +28,8 @@ import {
 import { CapturedPhoto, EventConfig, EventTheme } from '../types';
 import { FILTER_PRESETS } from '../constants/filters';
 import { AnimatedPhotoBagLogo } from './AnimatedPhotoBagLogo';
+import { LanguageToggle } from './LanguageToggle';
+import { Language, TranslationKey } from '../i18n/translations';
 import { motion } from 'motion/react';
 
 interface IdleScreenProps {
@@ -37,6 +39,9 @@ interface IdleScreenProps {
   recentPhotos: CapturedPhoto[];
   soundEnabled: boolean;
   onOpenAdminDashboard?: () => void;
+  language: Language;
+  t: (key: TranslationKey) => string;
+  onChangeLanguage: (language: Language) => void;
 }
 
 export const DEFAULT_EVENT_CONFIG: EventConfig = {
@@ -280,6 +285,9 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
   recentPhotos,
   soundEnabled,
   onOpenAdminDashboard,
+  language,
+  t,
+  onChangeLanguage,
 }) => {
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [tempConfig, setTempConfig] = useState<EventConfig>(eventConfig);
@@ -474,28 +482,36 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
           </motion.div>
         </div>
 
-        {/* Admin Event Settings Button (Hidden if hideAdminGearButton is set) */}
-        {!(eventConfig.security?.hideAdminGearButton) && (
-          <button
-            id="idle-config-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onOpenAdminDashboard) {
-                onOpenAdminDashboard();
-              } else {
-                setShowConfigModal(true);
-              }
-            }}
-            className={`p-2.5 sm:p-3 rounded-full backdrop-blur-md border transition-all active:scale-90 hover:scale-105 shadow-sm cursor-pointer ${
-              isDarkTheme
-                ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white/90'
-                : 'bg-black/5 hover:bg-black/10 border-black/10 text-[#1A1A1A]'
-            }`}
-            title="Cài đặt Quản Trị Viên & Kiosk"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        )}
+        {/* Bên phải: nút đổi ngôn ngữ (VI/EN) cho khách + nút mở Admin (nếu chưa ẩn) */}
+        <div className="flex items-center gap-2">
+          <LanguageToggle
+            language={language}
+            onChangeLanguage={onChangeLanguage}
+            className={isDarkTheme ? 'text-white' : 'text-[#1A1A1A]'}
+          />
+
+          {!(eventConfig.security?.hideAdminGearButton) && (
+            <button
+              id="idle-config-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenAdminDashboard) {
+                  onOpenAdminDashboard();
+                } else {
+                  setShowConfigModal(true);
+                }
+              }}
+              className={`p-2.5 sm:p-3 rounded-full backdrop-blur-md border transition-all active:scale-90 hover:scale-105 shadow-sm cursor-pointer ${
+                isDarkTheme
+                  ? 'bg-white/10 hover:bg-white/20 border-white/20 text-white/90'
+                  : 'bg-black/5 hover:bg-black/10 border-black/10 text-[#1A1A1A]'
+              }`}
+              title="Cài đặt Quản Trị Viên & Kiosk"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </header>
 
       {/* CENTER HERO: Official PhotoBag Logo Emblem OR Custom Event Title with Auto-Rotation */}
@@ -612,7 +628,12 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
             className="text-xs sm:text-sm md:text-base font-extrabold tracking-wider sm:tracking-widest uppercase select-none whitespace-nowrap drop-shadow-xs transition-colors"
             style={{ color: currentTheme.textColor }}
           >
-            {eventConfig.customInstructions || (eventConfig.captureMode === 'free' ? 'CHẠM BẤT KỲ ĐÂU ĐỂ CHỤP ẢNH TỰ DO' : 'CHẠM BẤT KỲ ĐÂU ĐỂ BẮT ĐẦU CHỤP ẢNH')}
+            {language === 'en'
+              ? eventConfig.captureMode === 'free'
+                ? t('idle_tapToStartFree')
+                : t('idle_tapToStartDefault')
+              : eventConfig.customInstructions ||
+                (eventConfig.captureMode === 'free' ? t('idle_tapToStartFree') : t('idle_tapToStartDefault'))}
           </span>
         </div>
 
@@ -641,7 +662,7 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
                       width: '72px',
                       height: '96px',
                     }}
-                    title="Chạm để phóng to xem ảnh"
+                    title={t('idle_photoZoomTitle')}
                   >
                     <div className="w-full h-full rounded-lg overflow-hidden bg-[#1A1A1A] relative group">
                       <img
@@ -693,7 +714,7 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
             <button
               onClick={() => setPreviewPhoto(null)}
               className="absolute -top-3 -right-3 sm:-top-3.5 sm:-right-3.5 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/80 text-white flex items-center justify-center border-2 border-white shadow-lg hover:bg-black transition-all hover:scale-110 active:scale-95 z-20"
-              title="Đóng xem ảnh"
+              title={t('idle_photoCloseTitle')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -716,7 +737,7 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
             {/* Modal Info Footer */}
             <div className="w-full mt-3 flex items-center justify-between px-1">
               <div>
-                <p className="text-xs font-bold text-neutral-800">Ảnh kỷ niệm sự kiện</p>
+                <p className="text-xs font-bold text-neutral-800">{t('idle_eventMemoryPhoto')}</p>
                 <p className="text-[10px] text-neutral-500">
                   {new Date(previewPhoto.timestamp).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • PhotoBag Studio
                 </p>
@@ -730,7 +751,7 @@ export const IdleScreen: React.FC<IdleScreenProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-[#1A1A1A] hover:bg-black text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md active:scale-95"
               >
                 <Camera className="w-3.5 h-3.5" />
-                <span>Chụp Ảnh Ngay</span>
+                <span>{t('common_takePhotoNow')}</span>
               </button>
             </div>
           </div>

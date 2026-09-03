@@ -21,6 +21,7 @@ import {
   X as XIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { Language, TranslationKey } from '../i18n/translations';
 
 interface ShareScreenProps {
   onNavigate: (screen: AppScreen) => void;
@@ -35,10 +36,17 @@ interface ShareScreenProps {
   onUpdatePhotoFilter?: (photoId: string, filterId: string, intensity: number) => void;
   onApplyFilterToAll?: (filterId: string, intensity: number) => void;
   onUpdateConsent?: (photoIds: string[], consent: boolean) => void;
+  // Báo ra ngoài (App.tsx) khi ảnh vừa tải lên đám mây thành công (mã QR sẵn sàng) / khi khách vừa
+  // tải về file PNG xuất bản thành công — để App.tsx cộng dồn thống kê (Admin > Thống Kê) và gửi âm
+  // thầm lên Worker cho thống kê tổng xem từ xa. Không bắt buộc — bỏ qua nếu không truyền vào.
+  onQrShareRecorded?: () => void;
+  onExportRecorded?: () => void;
   // Chế độ Biên Tập / Xuất Bản giờ do TopAppBar hiển thị & điều khiển (đối xứng với nút Chụp Ảnh),
   // nên ShareScreen chỉ còn ĐỌC & yêu cầu đổi giá trị này qua props, không tự giữ state nội bộ nữa.
   activeMode: 'edit' | 'export';
   onSetActiveMode: (mode: 'edit' | 'export') => void;
+  language: Language;
+  t: (key: TranslationKey) => string;
 }
 
 export const ShareScreen: React.FC<ShareScreenProps> = ({
@@ -52,8 +60,12 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
   eventConfig,
   sessionVideoUrl,
   onUpdateConsent,
+  onQrShareRecorded,
+  onExportRecorded,
   activeMode,
   onSetActiveMode,
+  language,
+  t,
 }) => {
   const [publicConsent, setPublicConsent] = useState(true);
   const [layout] = useState<StripLayout>(initialLayout);
@@ -268,6 +280,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
 
       const filename = `photobooth_${layout}_${frameStyle}_${Date.now()}.png`;
       downloadCanvas(canvas, filename);
+      onExportRecorded?.();
 
       confetti({
         particleCount: 80,
@@ -286,8 +299,8 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'Dải Ảnh Kỷ Niệm Photobooth Của Tôi',
-          text: 'Xem dải ảnh photobooth phong cách nghệ thuật từ Studio!',
+          title: t('share_nativeShareTitle'),
+          text: t('share_nativeShareText'),
           url: shareUrl,
         });
       } else {
@@ -299,6 +312,11 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
       // User cancelled share
     }
   };
+
+  // Chặn đếm trùng "Lượt Chia Sẻ QR": effect tải lên đám mây bên dưới có thể chạy lại nhiều lần cho
+  // CÙNG 1 phiên chụp (vd khách bấm qua lại Biên Tập ⇄ Xuất Bản) — chỉ báo ra ngoài đúng 1 lần cho
+  // mỗi lần tải lên thành công thực sự mới (ảnh khác, hoặc bấm "Thử lại" sau khi lỗi).
+  const qrShareRecordedKeyRef = useRef<string | null>(null);
 
   // Tự động tải ảnh lên đám mây ngay khi khách chuyển sang màn "Xuất Bản" — để có link thật cho
   // mã QR kịp sẵn sàng trước khi khách kịp lấy điện thoại ra quét.
@@ -316,7 +334,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         setCloudUploadError(null);
         const canvas = await buildStripCanvas();
         const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
-        if (!blob) throw new Error('Không tạo được ảnh để tải lên.');
+        if (!blob) throw new Error(t('share_uploadFailedNoBlob'));
         if (cancelled) return;
 
         const { url } = await uploadPhotoToCloud(blob, eventConfig!.cloudStorage!);
@@ -332,10 +350,16 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         setUploadedPhotoUrl(url);
         setUploadedPhotoQrSvg(svg);
         setCloudUploadStatus('done');
+
+        const sessionKey = `${capturedPhotos.map((p) => p.id).join(',')}#${cloudUploadAttempt}`;
+        if (qrShareRecordedKeyRef.current !== sessionKey) {
+          qrShareRecordedKeyRef.current = sessionKey;
+          onQrShareRecorded?.();
+        }
       } catch (err) {
         if (cancelled) return;
         setCloudUploadStatus('error');
-        setCloudUploadError(err instanceof Error ? err.message : 'Tải ảnh lên đám mây thất bại.');
+        setCloudUploadError(err instanceof Error ? err.message : t('share_uploadFailedCloud'));
       }
     })();
 
@@ -436,7 +460,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         </span>
         {!isCompact && (
           <div className="mt-1 text-[6.5px] sm:text-[7.5px] italic opacity-85 leading-snug line-clamp-3">
-            {noteText || 'Lưu bút kỷ niệm ♡'}
+            {noteText || t('share_defaultNoteFallback')}
           </div>
         )}
       </div>
@@ -548,10 +572,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         <div className="w-full max-w-4xl px-3 sm:px-4 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
           <div>
             <span className="font-sans-vietnam text-[9px] uppercase tracking-[0.25em] text-[#8C7A5B] font-semibold block">
-              BIÊN TẬP & XUẤT BẢN
+              {t('share_kicker')}
             </span>
             <h2 className="font-artistic-serif text-base sm:text-lg font-semibold text-[#1A1A1A] tracking-[0.08em] leading-tight uppercase">
-              SỬA NGAY LẤY LIỀN
+              {t('share_title')}
             </h2>
           </div>
         </div>
@@ -1045,14 +1069,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                   <span className="font-sans text-xs sm:text-sm font-bold text-[#1A1A1A]">
-                    Đang chọn: <span className="text-amber-900 bg-amber-300/80 px-2 py-0.5 rounded-lg font-mono font-black">Ô #{activeSlotIndex! + 1}</span>
+                    {t('share_selecting')} <span className="text-amber-900 bg-amber-300/80 px-2 py-0.5 rounded-lg font-mono font-black">{t('gallery_slotLabel')} #{activeSlotIndex! + 1}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setActiveSlotIndex(null)}
                     className="text-[11px] text-gray-500 hover:text-black underline cursor-pointer ml-1"
                   >
-                    (Bỏ chọn)
+                    {t('share_deselect')}
                   </button>
                 </div>
 
@@ -1063,7 +1087,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-white hover:bg-amber-400 hover:text-black text-[#1A1A1A] rounded-xl font-sans text-xs sm:text-sm font-bold border border-[#1A1A1A]/20 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   >
                     <RotateCw className="w-4 h-4 text-amber-600" />
-                    <span>Xoay 90°</span>
+                    <span>{t('share_rotate90')}</span>
                     {(activeSlotCustom?.rotation || 0) > 0 && (
                       <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-xs font-mono font-bold">
                         {activeSlotCustom?.rotation}°
@@ -1081,10 +1105,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     }`}
                   >
                     <FlipHorizontal className={`w-4 h-4 ${activeSlotCustom?.flipH ? 'text-amber-300' : 'text-amber-600'}`} />
-                    <span>Lật Ngang</span>
+                    <span>{t('share_flipHorizontal')}</span>
                     {activeSlotCustom?.flipH && (
                       <span className="text-[10px] bg-amber-400 text-black px-1.5 py-0.2 rounded-xs font-bold">
-                        Đã lật
+                        {t('share_flipped')}
                       </span>
                     )}
                   </button>
@@ -1095,11 +1119,11 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2 text-gray-700">
                   <span className="text-sm">👆</span>
                   <span className="text-xs sm:text-sm font-medium font-sans">
-                    Chạm vào ảnh bất kỳ trên dải giấy để <span className="font-bold text-amber-800">Xoay</span> hoặc <span className="font-bold text-amber-800">Lật ảnh</span>
+                    {t('share_tapPhotoHintPre')} <span className="font-bold text-amber-800">{t('share_rotateWord')}</span> {t('share_orWord')} <span className="font-bold text-amber-800">{t('share_flipPhotoWord')}</span>
                   </span>
                 </div>
                 <span className="text-[11px] text-gray-500 hidden sm:inline font-sans">
-                  (Chạm lại để bỏ chọn)
+                  {t('share_tapAgainHint')}
                 </span>
               </div>
             )}
@@ -1120,33 +1144,33 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh chỉnh cuối. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
+                {stepNote}. {t('share_sectionTitleDateNote')}
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
+                    {t('share_labelTitle')}
                   </label>
                   <input
                     type="text"
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
                     maxLength={40}
-                    placeholder="VD: Jane & Johnny"
+                    placeholder={t('share_placeholderTitle')}
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
                 </div>
                 <div>
                   <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Ngày Tháng In:
+                    {t('share_labelDate')}
                   </label>
                   <input
                     type="text"
                     value={dateStr}
                     onChange={(e) => setDateStr(e.target.value)}
                     maxLength={20}
-                    placeholder="VD: 1-15-2019"
+                    placeholder={t('share_placeholderDate')}
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
                 </div>
@@ -1154,14 +1178,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
 
               <div>
                 <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
+                  {t('share_labelNote')}
                 </label>
                 <textarea
                   rows={2}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   maxLength={140}
-                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
+                  placeholder={t('share_placeholderNote')}
                   className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                 />
               </div>
@@ -1173,7 +1197,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    {stepFrameStyle}. Kiểu Khung & Chủ Đề Nghệ Thuật:
+                    {stepFrameStyle}. {t('share_sectionFrameStyle')}
                   </h3>
                 </div>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">
@@ -1218,7 +1242,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
                 <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                  {stepPaperColor}. Màu Giấy In & Chất Liệu Viền:
+                  {stepPaperColor}. {t('share_sectionPaperColor')}
                 </span>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">{frameInfo.name}</span>
               </div>
@@ -1256,7 +1280,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <Smile className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    {stepSticker}. Sticker Trang Trí
+                    {stepSticker}. {t('share_sectionSticker')}
                   </h3>
                 </div>
                 {placedStickers.length > 0 && (
@@ -1267,7 +1291,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
 
               <p className="text-[10.5px] text-[#1A1A1A]/60 -mt-1">
-                Bấm 1 icon để thêm vào tờ ảnh, rồi chạm-kéo trên bản xem trước phía trên để đổi chỗ.
+                {t('share_stickerHint')}
               </p>
 
               <div className="grid grid-cols-8 sm:grid-cols-12 gap-1.5">
@@ -1277,7 +1301,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     type="button"
                     onClick={() => handleAddSticker(emoji)}
                     className="aspect-square rounded-xl bg-[#F9F7F2] border border-[#1A1A1A]/15 hover:border-[#1A1A1A]/50 hover:bg-white flex items-center justify-center text-xl transition-all cursor-pointer active:scale-90"
-                    title="Thêm sticker này"
+                    title={t('share_addSticker')}
                   >
                     {emoji}
                   </button>
@@ -1293,7 +1317,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-sans font-bold text-[#1A1A1A] flex items-center gap-1.5">
                         <span className="text-lg">{selected.emoji}</span>
-                        <span>Đang chỉnh sticker</span>
+                        <span>{t('share_editingSticker')}</span>
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -1302,14 +1326,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                           className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider border border-rose-200 flex items-center gap-1 cursor-pointer"
                         >
                           <XIcon className="w-3 h-3" />
-                          <span>Xóa</span>
+                          <span>{t('common_delete')}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setSelectedStickerId(null)}
                           className="px-2.5 py-1 rounded-lg bg-[#EFEEE8] hover:bg-[#E5E1D8] text-[#1A1A1A]/70 text-[10px] font-bold uppercase tracking-wider border border-[#1A1A1A]/15 cursor-pointer"
                         >
-                          Xong
+                          {t('share_doneWord')}
                         </button>
                       </div>
                     </div>
@@ -1317,7 +1341,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
-                          Cỡ Sticker
+                          {t('share_stickerSize')}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
                           {Math.round(selected.scale * 100)}%
@@ -1337,7 +1361,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
-                          Góc Xoay
+                          {t('share_rotationAngle')}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
                           {selected.rotation}°
@@ -1364,7 +1388,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 onClick={() => onSetActiveMode('export')}
                 className="w-full py-3 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-xs uppercase tracking-widest font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
-                <span>Chuyển Sang Xuất Bản & Tải Về</span>
+                <span>{t('share_goToExport')}</span>
                 <Share2 className="w-4 h-4" />
               </button>
             </div>
@@ -1378,7 +1402,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-[#8C7A5B]" />
                 <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                  Xuất Bản & Tải Dải Ảnh
+                  {t('share_exportSectionTitle')}
                 </h3>
               </div>
             </div>
@@ -1393,8 +1417,8 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <Download className="w-4 h-4" />
               <span>
                 {isExporting
-                  ? 'Đang Kết Xuất Bản In 300 DPI...'
-                  : `Tải Về Ảnh PNG 300 DPI (${activeFrameStyleOption.name})`}
+                  ? t('share_exporting')
+                  : `${t('share_downloadPngPrefix')} (${activeFrameStyleOption.name})`}
               </span>
             </button>
 
@@ -1408,15 +1432,15 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-sans font-bold text-[#1A1A1A] uppercase tracking-wider">
-                        Video Quá Trình Chụp (BTS)
+                        {t('share_btsTitle')}
                       </h4>
                       <span className="text-[9.5px] text-[#1A1A1A]/60 font-sans">
-                        Ghi lại toàn bộ khoảnh khắc từ tấm 1 đến khi hoàn thành
+                        {t('share_btsDesc')}
                       </span>
                     </div>
                   </div>
                   <span className="text-[9px] font-bold uppercase bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md border border-rose-200">
-                    Sẵn Sàng
+                    {t('share_btsReady')}
                   </span>
                 </div>
 
@@ -1435,7 +1459,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   className="w-full py-2.5 bg-[#E86A7C] hover:bg-[#D45668] text-white font-sans text-xs uppercase tracking-wider transition-all active:scale-98 rounded-lg flex items-center justify-center gap-2 cursor-pointer font-bold shadow-xs"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Tải Video BTS Về Máy (.webm)</span>
+                  <span>{t('share_btsDownload')}</span>
                 </button>
               </div>
             )}
@@ -1448,7 +1472,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold shadow-2xs"
             >
               <Share2 className="w-4 h-4" />
-              <span>{copied ? 'Đã Sao Chép Liên Kết!' : 'Chia Sẻ Liên Kết'}</span>
+              <span>{copied ? t('share_linkCopied') : t('share_shareLink')}</span>
             </button>
 
             {/* Mã QR Quét Tải Về Điện Thoại */}
@@ -1466,38 +1490,38 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-1">
                   <QrCode className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#8C7A5B] font-bold">
-                    QUÉT MÃ TRÊN ĐIỆN THOẠI
+                    {t('share_scanOnPhone')}
                   </span>
                 </div>
                 <p className="font-sans text-xs font-bold text-[#1A1A1A] mt-0.5">
-                  Tải Dải Ảnh Về Thư Viện
+                  {t('share_downloadToLibrary')}
                 </p>
                 {cloudUploadStatus === 'done' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Mở camera quét mã để xem và lưu dải ảnh sắc nét về máy.
+                    {t('share_scanHintDone')}
                   </span>
                 )}
                 {cloudUploadStatus === 'uploading' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Đang tải ảnh lên để tạo mã QR, chờ vài giây...
+                    {t('share_scanHintUploading')}
                   </span>
                 )}
                 {cloudUploadStatus === 'not_configured' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Chưa cấu hình nơi lưu ảnh trên đám mây (Admin → Quản Lý Ảnh & Bộ Nhớ).
+                    {t('share_cloudNotConfigured')}
                   </span>
                 )}
                 {cloudUploadStatus === 'error' && (
                   <div className="flex flex-col gap-1 mt-0.5">
                     <span className="font-sans text-[10px] text-rose-600">
-                      {cloudUploadError || 'Tải ảnh lên thất bại.'}
+                      {cloudUploadError || t('share_uploadFailedGeneric')}
                     </span>
                     <button
                       type="button"
                       onClick={() => setCloudUploadAttempt((n) => n + 1)}
                       className="self-start text-[10px] font-bold text-[#8C7A5B] underline cursor-pointer"
                     >
-                      Thử lại
+                      {t('share_retry')}
                     </button>
                   </div>
                 )}
@@ -1509,10 +1533,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="flex items-center gap-2.5">
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-[#1A1A1A]">
-                    Hiển thị trên màn hình chờ sự kiện (Live Feed)
+                    {t('share_liveFeedLabel')}
                   </span>
                   <span className="text-[10px] text-[#1A1A1A]/60 font-sans">
-                    Chia sẻ khoảnh khắc vui vẻ để lan tỏa không khí sự kiện
+                    {t('share_liveFeedDesc')}
                   </span>
                 </div>
               </div>
@@ -1541,7 +1565,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold"
               >
                 <ImageIcon className="w-4 h-4" />
-                <span>Quay Lại Bộ Sưu Tập</span>
+                <span>{t('share_backToGallery')}</span>
               </button>
             </div>
           </section>
@@ -1557,10 +1581,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         <div className="w-full max-w-4xl px-3 sm:px-4 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
           <div>
             <span className="font-sans-vietnam text-[9px] uppercase tracking-[0.25em] text-[#8C7A5B] font-semibold block">
-              BIÊN TẬP & XUẤT BẢN
+              {t('share_kicker')}
             </span>
             <h2 className="font-artistic-serif text-base sm:text-lg font-semibold text-[#1A1A1A] tracking-[0.08em] leading-tight uppercase">
-              SỬA NGAY LẤY LIỀN
+              {t('share_title')}
             </h2>
           </div>
         </div>
@@ -2054,14 +2078,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
                   <span className="font-sans text-xs sm:text-sm font-bold text-[#1A1A1A]">
-                    Đang chọn: <span className="text-amber-900 bg-amber-300/80 px-2 py-0.5 rounded-lg font-mono font-black">Ô #{activeSlotIndex! + 1}</span>
+                    {t('share_selecting')} <span className="text-amber-900 bg-amber-300/80 px-2 py-0.5 rounded-lg font-mono font-black">{t('gallery_slotLabel')} #{activeSlotIndex! + 1}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setActiveSlotIndex(null)}
                     className="text-[11px] text-gray-500 hover:text-black underline cursor-pointer ml-1"
                   >
-                    (Bỏ chọn)
+                    {t('share_deselect')}
                   </button>
                 </div>
 
@@ -2072,7 +2096,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-white hover:bg-amber-400 hover:text-black text-[#1A1A1A] rounded-xl font-sans text-xs sm:text-sm font-bold border border-[#1A1A1A]/20 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                   >
                     <RotateCw className="w-4 h-4 text-amber-600" />
-                    <span>Xoay 90°</span>
+                    <span>{t('share_rotate90')}</span>
                     {(activeSlotCustom?.rotation || 0) > 0 && (
                       <span className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-xs font-mono font-bold">
                         {activeSlotCustom?.rotation}°
@@ -2090,10 +2114,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     }`}
                   >
                     <FlipHorizontal className={`w-4 h-4 ${activeSlotCustom?.flipH ? 'text-amber-300' : 'text-amber-600'}`} />
-                    <span>Lật Ngang</span>
+                    <span>{t('share_flipHorizontal')}</span>
                     {activeSlotCustom?.flipH && (
                       <span className="text-[10px] bg-amber-400 text-black px-1.5 py-0.2 rounded-xs font-bold">
-                        Đã lật
+                        {t('share_flipped')}
                       </span>
                     )}
                   </button>
@@ -2104,11 +2128,11 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2 text-gray-700">
                   <span className="text-sm">👆</span>
                   <span className="text-xs sm:text-sm font-medium font-sans">
-                    Chạm vào ảnh bất kỳ trên dải giấy để <span className="font-bold text-amber-800">Xoay</span> hoặc <span className="font-bold text-amber-800">Lật ảnh</span>
+                    {t('share_tapPhotoHintPre')} <span className="font-bold text-amber-800">{t('share_rotateWord')}</span> {t('share_orWord')} <span className="font-bold text-amber-800">{t('share_flipPhotoWord')}</span>
                   </span>
                 </div>
                 <span className="text-[11px] text-gray-500 hidden sm:inline font-sans">
-                  (Chạm lại để bỏ chọn)
+                  {t('share_tapAgainHint')}
                 </span>
               </div>
             )}
@@ -2127,33 +2151,33 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 tự gõ thấy ngay trên bản xem trước, còn khung/màu là bước tinh chỉnh cuối. */}
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                {stepNote}. Tiêu Đề, Ngày In & Lời Chúc Lưu Bút:
+                {stepNote}. {t('share_sectionTitleDateNote')}
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Tiêu Đề / Tên Nhân Vật / Cặp Đôi:
+                    {t('share_labelTitle')}
                   </label>
                   <input
                     type="text"
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
                     maxLength={40}
-                    placeholder="VD: Jane & Johnny"
+                    placeholder={t('share_placeholderTitle')}
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
                 </div>
                 <div>
                   <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                    Ngày Tháng In:
+                    {t('share_labelDate')}
                   </label>
                   <input
                     type="text"
                     value={dateStr}
                     onChange={(e) => setDateStr(e.target.value)}
                     maxLength={20}
-                    placeholder="VD: 1-15-2019"
+                    placeholder={t('share_placeholderDate')}
                     className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                   />
                 </div>
@@ -2161,14 +2185,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
 
               <div>
                 <label className="text-[9.5px] font-sans font-bold uppercase tracking-widest text-[#1A1A1A]/70 block mb-1">
-                  Nội Dung Lưu Bút / Lời Chúc (Hiển thị trên phần giấy trắng trống):
+                  {t('share_labelNote')}
                 </label>
                 <textarea
                   rows={2}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   maxLength={140}
-                  placeholder="Nhập lời chúc, lưu bút, thông điệp kỷ niệm..."
+                  placeholder={t('share_placeholderNote')}
                   className="w-full px-3 py-2 bg-[#F9F7F2] border border-[#1A1A1A]/20 rounded-lg text-xs font-sans focus:outline-none focus:border-[#1A1A1A]"
                 />
               </div>
@@ -2180,7 +2204,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    {stepFrameStyle}. Kiểu Khung & Chủ Đề Nghệ Thuật:
+                    {stepFrameStyle}. {t('share_sectionFrameStyle')}
                   </h3>
                 </div>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">
@@ -2225,7 +2249,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             <section className="bg-[#EFEEE8]/60 p-4 sm:p-5 rounded-2xl border border-[#1A1A1A]/10 shadow-xs flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-[#1A1A1A]/10 pb-2">
                 <span className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]/80">
-                  {stepPaperColor}. Màu Giấy In & Chất Liệu Viền:
+                  {stepPaperColor}. {t('share_sectionPaperColor')}
                 </span>
                 <span className="text-[10px] font-bold text-[#8C7A5B]">{frameInfo.name}</span>
               </div>
@@ -2263,7 +2287,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-2">
                   <Smile className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                    {stepSticker}. Sticker Trang Trí
+                    {stepSticker}. {t('share_sectionSticker')}
                   </h3>
                 </div>
                 {placedStickers.length > 0 && (
@@ -2274,7 +2298,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               </div>
 
               <p className="text-[10.5px] text-[#1A1A1A]/60 -mt-1">
-                Bấm 1 icon để thêm vào tờ ảnh, rồi chạm-kéo trên bản xem trước phía trên để đổi chỗ.
+                {t('share_stickerHint')}
               </p>
 
               <div className="grid grid-cols-8 sm:grid-cols-12 gap-1.5">
@@ -2284,7 +2308,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     type="button"
                     onClick={() => handleAddSticker(emoji)}
                     className="aspect-square rounded-xl bg-[#F9F7F2] border border-[#1A1A1A]/15 hover:border-[#1A1A1A]/50 hover:bg-white flex items-center justify-center text-xl transition-all cursor-pointer active:scale-90"
-                    title="Thêm sticker này"
+                    title={t('share_addSticker')}
                   >
                     {emoji}
                   </button>
@@ -2300,7 +2324,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-sans font-bold text-[#1A1A1A] flex items-center gap-1.5">
                         <span className="text-lg">{selected.emoji}</span>
-                        <span>Đang chỉnh sticker</span>
+                        <span>{t('share_editingSticker')}</span>
                       </span>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -2309,14 +2333,14 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                           className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider border border-rose-200 flex items-center gap-1 cursor-pointer"
                         >
                           <XIcon className="w-3 h-3" />
-                          <span>Xóa</span>
+                          <span>{t('common_delete')}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setSelectedStickerId(null)}
                           className="px-2.5 py-1 rounded-lg bg-[#EFEEE8] hover:bg-[#E5E1D8] text-[#1A1A1A]/70 text-[10px] font-bold uppercase tracking-wider border border-[#1A1A1A]/15 cursor-pointer"
                         >
-                          Xong
+                          {t('share_doneWord')}
                         </button>
                       </div>
                     </div>
@@ -2324,7 +2348,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
-                          Cỡ Sticker
+                          {t('share_stickerSize')}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
                           {Math.round(selected.scale * 100)}%
@@ -2344,7 +2368,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[10px] font-sans uppercase tracking-wider text-[#1A1A1A]/70 font-bold">
-                          Góc Xoay
+                          {t('share_rotationAngle')}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-[#8C7A5B]">
                           {selected.rotation}°
@@ -2371,7 +2395,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 onClick={() => onSetActiveMode('export')}
                 className="w-full py-3 bg-[#1A1A1A] hover:bg-[#8C7A5B] text-[#F9F7F2] font-sans text-xs uppercase tracking-widest font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
-                <span>Chuyển Sang Xuất Bản & Tải Về</span>
+                <span>{t('share_goToExport')}</span>
                 <Share2 className="w-4 h-4" />
               </button>
             </div>
@@ -2385,7 +2409,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-[#8C7A5B]" />
                 <h3 className="text-xs font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
-                  Xuất Bản & Tải Dải Ảnh
+                  {t('share_exportSectionTitle')}
                 </h3>
               </div>
             </div>
@@ -2400,8 +2424,8 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <Download className="w-4 h-4" />
               <span>
                 {isExporting
-                  ? 'Đang Kết Xuất Bản In 300 DPI...'
-                  : `Tải Về Ảnh PNG 300 DPI (${activeFrameStyleOption.name})`}
+                  ? t('share_exporting')
+                  : `${t('share_downloadPngPrefix')} (${activeFrameStyleOption.name})`}
               </span>
             </button>
 
@@ -2415,15 +2439,15 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                     </div>
                     <div>
                       <h4 className="text-xs font-sans font-bold text-[#1A1A1A] uppercase tracking-wider">
-                        Video Quá Trình Chụp (BTS)
+                        {t('share_btsTitle')}
                       </h4>
                       <span className="text-[9.5px] text-[#1A1A1A]/60 font-sans">
-                        Ghi lại toàn bộ khoảnh khắc từ tấm 1 đến khi hoàn thành
+                        {t('share_btsDesc')}
                       </span>
                     </div>
                   </div>
                   <span className="text-[9px] font-bold uppercase bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md border border-rose-200">
-                    Sẵn Sàng
+                    {t('share_btsReady')}
                   </span>
                 </div>
 
@@ -2442,7 +2466,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   className="w-full py-2.5 bg-[#E86A7C] hover:bg-[#D45668] text-white font-sans text-xs uppercase tracking-wider transition-all active:scale-98 rounded-lg flex items-center justify-center gap-2 cursor-pointer font-bold shadow-xs"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Tải Video BTS Về Máy (.webm)</span>
+                  <span>{t('share_btsDownload')}</span>
                 </button>
               </div>
             )}
@@ -2455,7 +2479,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold shadow-2xs"
             >
               <Share2 className="w-4 h-4" />
-              <span>{copied ? 'Đã Sao Chép Liên Kết!' : 'Chia Sẻ Liên Kết'}</span>
+              <span>{copied ? t('share_linkCopied') : t('share_shareLink')}</span>
             </button>
 
             {/* Mã QR Quét Tải Về Điện Thoại */}
@@ -2473,38 +2497,38 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 <div className="flex items-center gap-1">
                   <QrCode className="w-3.5 h-3.5 text-[#8C7A5B]" />
                   <span className="font-sans text-[9px] uppercase tracking-[0.2em] text-[#8C7A5B] font-bold">
-                    QUÉT MÃ TRÊN ĐIỆN THOẠI
+                    {t('share_scanOnPhone')}
                   </span>
                 </div>
                 <p className="font-sans text-xs font-bold text-[#1A1A1A] mt-0.5">
-                  Tải Dải Ảnh Về Thư Viện
+                  {t('share_downloadToLibrary')}
                 </p>
                 {cloudUploadStatus === 'done' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Mở camera quét mã để xem và lưu dải ảnh sắc nét về máy.
+                    {t('share_scanHintDone')}
                   </span>
                 )}
                 {cloudUploadStatus === 'uploading' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Đang tải ảnh lên để tạo mã QR, chờ vài giây...
+                    {t('share_scanHintUploading')}
                   </span>
                 )}
                 {cloudUploadStatus === 'not_configured' && (
                   <span className="font-sans text-[10px] text-[#1A1A1A]/60 mt-0.5">
-                    Chưa cấu hình nơi lưu ảnh trên đám mây (Admin → Quản Lý Ảnh & Bộ Nhớ).
+                    {t('share_cloudNotConfigured')}
                   </span>
                 )}
                 {cloudUploadStatus === 'error' && (
                   <div className="flex flex-col gap-1 mt-0.5">
                     <span className="font-sans text-[10px] text-rose-600">
-                      {cloudUploadError || 'Tải ảnh lên thất bại.'}
+                      {cloudUploadError || t('share_uploadFailedGeneric')}
                     </span>
                     <button
                       type="button"
                       onClick={() => setCloudUploadAttempt((n) => n + 1)}
                       className="self-start text-[10px] font-bold text-[#8C7A5B] underline cursor-pointer"
                     >
-                      Thử lại
+                      {t('share_retry')}
                     </button>
                   </div>
                 )}
@@ -2516,10 +2540,10 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="flex items-center gap-2.5">
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-[#1A1A1A]">
-                    Hiển thị trên màn hình chờ sự kiện (Live Feed)
+                    {t('share_liveFeedLabel')}
                   </span>
                   <span className="text-[10px] text-[#1A1A1A]/60 font-sans">
-                    Chia sẻ khoảnh khắc vui vẻ để lan tỏa không khí sự kiện
+                    {t('share_liveFeedDesc')}
                   </span>
                 </div>
               </div>
@@ -2548,7 +2572,7 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                 className="w-full py-2.5 bg-[#F9F7F2] hover:bg-white text-[#1A1A1A] border border-[#1A1A1A]/20 font-sans text-xs uppercase tracking-wider transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer font-semibold"
               >
                 <ImageIcon className="w-4 h-4" />
-                <span>Quay Lại Bộ Sưu Tập</span>
+                <span>{t('share_backToGallery')}</span>
               </button>
             </div>
           </section>

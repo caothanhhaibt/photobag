@@ -4,6 +4,7 @@ import { SAMPLE_STUDIO_VIEWFINDER, SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMP
 import { playShutterSound, playBeepSound, playSuccessChime } from '../utils/audio';
 import { captureCalibratedFrame, buildCalibrationCssFilter } from '../utils/canvas';
 import { tryEnableContinuousAutofocus } from '../utils/camera';
+import { Language, TranslationKey } from '../i18n/translations';
 import { X, RotateCcw, Camera } from 'lucide-react';
 
 interface CameraScreenProps {
@@ -52,6 +53,8 @@ interface CameraScreenProps {
   // Lớp "Cân Chỉnh Camera Gốc" Admin cấu hình (sáng/tương phản/bão hòa/tông ấm-lạnh/mịn da/nét) —
   // áp dụng ngầm lên MỌI ảnh chụp ra, trước cả phong cách lọc màu khách tự chọn (currentFilterId).
   cameraCalibration?: CameraCalibrationConfig;
+  language: Language;
+  t: (key: TranslationKey) => string;
 }
 
 export const CameraScreen: React.FC<CameraScreenProps> = ({
@@ -98,6 +101,8 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
   onRegisterQuickPrintTrigger,
   onUpdateBurstPhotoCount,
   cameraCalibration,
+  language,
+  t,
 }) => {
   const [internalFlash, setInternalFlash] = useState(true);
   const flashEnabled = propFlashEnabled !== undefined ? propFlashEnabled : internalFlash;
@@ -363,23 +368,23 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
     if (!onUpdateShutterLabel) return;
 
     if (countdown !== null) {
-      onUpdateShutterLabel('ĐANG ĐẾM...');
+      onUpdateShutterLabel(t('camera_counting'));
     } else if (isUnlimitedCapture) {
       if (burstPhotos.length === 0) {
-        onUpdateShutterLabel('CHỤP ẢNH');
+        onUpdateShutterLabel(t('camera_takePhoto'));
       } else {
-        onUpdateShutterLabel(`CHỤP TIẾP (${burstPhotos.length})`);
+        onUpdateShutterLabel(`${t('camera_shootNext')} (${burstPhotos.length})`);
       }
     } else if (captureTriggerMode === 'manual' && isBurstActive && burstPhotos.length > 0 && burstPhotos.length < totalSlots) {
-      onUpdateShutterLabel(`TẤM ${burstPhotos.length + 1}/${totalSlots}`);
+      onUpdateShutterLabel(`${t('camera_shot')} ${burstPhotos.length + 1}/${totalSlots}`);
     } else if (sessionMode === 'single') {
-      onUpdateShutterLabel('CHỤP ẢNH');
+      onUpdateShutterLabel(t('camera_takePhoto'));
     } else if (captureTriggerMode === 'manual') {
-      onUpdateShutterLabel('CHỤP TẤM 1');
+      onUpdateShutterLabel(t('camera_shot1'));
     } else {
-      onUpdateShutterLabel('CHỤP ẢNH');
+      onUpdateShutterLabel(t('camera_takePhoto'));
     }
-  }, [countdown, captureTriggerMode, isBurstActive, burstPhotos.length, totalSlots, sessionMode, isUnlimitedCapture, onUpdateShutterLabel]);
+  }, [countdown, captureTriggerMode, isBurstActive, burstPhotos.length, totalSlots, sessionMode, isUnlimitedCapture, onUpdateShutterLabel, t]);
 
   // Chuyển đổi bộ đếm: 0s -> 3s -> 5s -> 10s
   const handleCycleTimer = () => {
@@ -809,10 +814,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
               <button
                 onClick={handleRetakeLastPhoto}
                 className="px-2.5 sm:px-3 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md border border-white/30 text-white rounded-full text-[10px] sm:text-[11px] font-sans font-bold uppercase tracking-wider transition-all active:scale-95 shadow-lg flex items-center gap-1.5 cursor-pointer"
-                title="Chụp lại tấm vừa rồi"
+                title={t('camera_retakeTitle')}
               >
                 <RotateCcw className="w-3.5 h-3.5 text-[#3B82F6]" />
-                <span>Chụp Lại</span>
+                <span>{t('camera_retake')}</span>
               </button>
             )}
 
@@ -820,10 +825,10 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             <button
               onClick={handleCancelBurst}
               className="px-2.5 sm:px-3 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md border border-white/30 text-white rounded-full text-[10px] sm:text-[11px] font-sans font-bold uppercase tracking-wider transition-all active:scale-95 shadow-lg flex items-center gap-1 cursor-pointer"
-              title="Hủy buổi chụp này"
+              title={t('camera_cancelSessionTitle')}
             >
               <X className="w-3.5 h-3.5 text-[#EF4444]" />
-              <span>HỦY</span>
+              <span>{t('camera_cancel')}</span>
             </button>
           </div>
         )}
@@ -834,11 +839,11 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             <div className="pointer-events-auto bg-black/75 backdrop-blur-xl border border-white/25 rounded-2xl p-2.5 sm:p-3 text-white shadow-[0_12px_35px_rgba(0,0,0,0.6)] flex flex-col items-center gap-2 text-center">
               <div className="flex items-center justify-center text-[#93C5FD]">
                 <span className="text-[10px] sm:text-[11px] font-sans font-bold uppercase tracking-wider">
-                  Đã chụp {burstPhotos.length}/{totalSlots} tấm
+                  {t('camera_capturedPrefix')} {burstPhotos.length}/{totalSlots} {t('camera_capturedSuffix')}
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-white/85 leading-snug">
-                Thoải mái đổi bộ lọc, chỉnh sáng hoặc tạo dáng mới rồi bấm chụp tiếp!
+                {t('camera_freeToChange')}
               </p>
               <div className="flex items-center gap-2 w-full pt-0.5">
                 <button
@@ -846,7 +851,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
                   className="flex-1 py-1.5 px-3 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  <span>Chụp Tấm {burstPhotos.length + 1}</span>
+                  <span>{t('camera_shootFrame')} {burstPhotos.length + 1}</span>
                 </button>
               </div>
             </div>
@@ -862,7 +867,7 @@ export const CameraScreen: React.FC<CameraScreenProps> = ({
             <div className="flex flex-col items-center animate-in zoom-in-75 duration-200" key={countdown}>
               {countdown === 1 ? (
                 <span className="text-[90px] sm:text-[130px] md:text-[160px] leading-none font-serif font-bold italic text-white tracking-wide uppercase drop-shadow-[0_6px_24px_rgba(0,0,0,0.95)]">
-                  Chụp!
+                  {t('camera_shootExclaim')}
                 </span>
               ) : (
                 <span className="text-[120px] sm:text-[150px] md:text-[190px] leading-none font-serif font-light italic text-white drop-shadow-[0_6px_24px_rgba(0,0,0,0.95)]">
