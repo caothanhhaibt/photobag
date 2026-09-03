@@ -18,6 +18,8 @@ import { SAMPLE_PHOTO_FRIENDS, SAMPLE_PHOTO_SOLO, SAMPLE_PHOTO_DUO, LAYOUT_OPTIO
 import { AnalyticsStats } from './types';
 import { Clock } from 'lucide-react';
 import { usePhoneCameraPairing } from './hooks/usePhoneCameraPairing';
+import { Language, LANGUAGE_STORAGE_KEY, getTranslator } from './i18n/translations';
+import { postStatsEvent } from './utils/cloudStorage';
 
 const STORAGE_KEY = 'photobooth_photos_v1';
 const EVENT_CONFIG_KEY = 'photobooth_event_config_v1';
@@ -80,6 +82,28 @@ export default function App() {
   const [recentSessionVideoUrl, setRecentSessionVideoUrl] = useState<string | null>(null);
   // Độ sáng camera (điều khiển qua 2 thanh trượt trong bảng "Tùy Chỉnh" ở logo, giao diện chụp ảnh)
   const [brightness, setBrightness] = useState<number>(100);
+
+  // Ngôn ngữ giao diện KHÁCH DÙNG (VI / EN) — khách có thể tự đổi bất kỳ lúc nào qua nút VI/EN ở
+  // màn hình chờ hoặc trên TopAppBar, ghi nhớ lựa chọn lần cuối bằng localStorage. Màn Admin (đằng
+  // sau mã PIN) không đổi theo, luôn hiển thị tiếng Việt vì đó là ngôn ngữ của chủ máy.
+  const [language, setLanguage] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      if (saved === 'vi' || saved === 'en') return saved;
+    } catch {
+      // Storage access issue
+    }
+    return 'vi';
+  });
+  const handleChangeLanguage = React.useCallback((newLanguage: Language) => {
+    setLanguage(newLanguage);
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, newLanguage);
+    } catch {
+      // Storage access issue
+    }
+  }, []);
+  const t = React.useMemo(() => getTranslator(language), [language]);
 
   // Cấu hình sự kiện & Màn hình chờ (Idle Screen)
   const [eventConfig, setEventConfig] = useState<EventConfig>(() => {
@@ -398,7 +422,19 @@ export default function App() {
     if (sessionPhotos.length > 0) {
       setActivePhoto(sessionPhotos[0]);
     }
-  }, [resetActivity]);
+
+    // Cộng dồn thống kê: 1 phiên chụp vừa hoàn tất + số ảnh trong phiên đó — cả bản lưu tại máy
+    // (Admin > Thống Kê) lẫn gửi âm thầm lên Worker để gộp thống kê tổng xem được từ xa (nếu đã
+    // cấu hình Mã Tài Khoản Thống Kê — postStatsEvent tự bỏ qua nếu chưa cấu hình hoặc mất mạng).
+    if (sessionPhotos.length > 0) {
+      handleUpdateAnalytics((prev) => ({
+        ...prev,
+        totalSessions: prev.totalSessions + 1,
+        totalPhotosCaptured: prev.totalPhotosCaptured + sessionPhotos.length,
+      }));
+      postStatsEvent(eventConfig.cloudStorage, { sessions: 1, photos: sessionPhotos.length });
+    }
+  }, [resetActivity, eventConfig.cloudStorage]);
 
   // Select filter from carousel
   const handleSelectFilter = React.useCallback((filterId: string, defaultIntensity?: number) => {
@@ -448,6 +484,20 @@ export default function App() {
       prev.map((p) => (photoIds.includes(p.id) ? { ...p, publicConsent: consent } : p))
     );
   }, [resetActivity]);
+
+  // Ảnh vừa tải lên đám mây thành công (mã QR ở màn Chia Sẻ đã sẵn sàng cho khách quét) — cộng dồn
+  // thống kê "Lượt Chia Sẻ QR" tại máy + gửi âm thầm lên Worker (nếu đã cấu hình Mã Tài Khoản Thống
+  // Kê). ShareScreen tự đảm bảo chỉ gọi 1 lần cho mỗi phiên (xem ref hasRecordedQrShareRef ở đó).
+  const handleQrShareRecorded = React.useCallback(() => {
+    handleUpdateAnalytics((prev) => ({ ...prev, totalQrShares: prev.totalQrShares + 1 }));
+    postStatsEvent(eventConfig.cloudStorage, { qrShares: 1 });
+  }, [eventConfig.cloudStorage]);
+
+  // Khách vừa tải về (xuất) file ảnh PNG 300 DPI thành công — cộng dồn thống kê "Dải Ảnh Đã Xuất".
+  const handleExportRecorded = React.useCallback(() => {
+    handleUpdateAnalytics((prev) => ({ ...prev, totalStripsExported: prev.totalStripsExported + 1 }));
+    postStatsEvent(eventConfig.cloudStorage, { exports: 1 });
+  }, [eventConfig.cloudStorage]);
 
   // Delete photo from library
   const handleDeletePhoto = React.useCallback((id: string) => {
@@ -638,6 +688,9 @@ export default function App() {
             setAdminInitialTab(null);
             setIsAdminModalOpen(true);
           }}
+          language={language}
+          t={t}
+          onChangeLanguage={handleChangeLanguage}
         />
       )}
 
@@ -645,6 +698,9 @@ export default function App() {
       {currentScreen !== 'idle' && (
         <TopAppBar
           currentScreen={currentScreen}
+          language={language}
+          t={t}
+          onChangeLanguage={handleChangeLanguage}
           onNavigate={handleNavigate}
           soundEnabled={soundEnabled}
           onToggleSound={() => setSoundEnabled(!soundEnabled)}
@@ -697,6 +753,8 @@ export default function App() {
                 onStartCapture={handleStartCaptureFromLayout}
                 eventConfig={eventConfig}
                 soundEnabled={soundEnabled}
+                language={language}
+                t={t}
               />
             </div>
           )}
@@ -746,6 +804,8 @@ export default function App() {
                 onRegisterQuickPrintTrigger={handleRegisterQuickPrint}
                 onUpdateBurstPhotoCount={setBurstPhotoCountInProgress}
                 cameraCalibration={eventConfig.cameraCalibration ?? DEFAULT_CAMERA_CALIBRATION}
+                language={language}
+                t={t}
               />
             </div>
           )}
@@ -762,6 +822,8 @@ export default function App() {
                 onUpdateCompletionStatus={setGalleryIsComplete}
                 captureMode={eventConfig.captureMode}
                 onSelectLayout={handleSelectLayout}
+                language={language}
+                t={t}
               />
             </div>
           )}
@@ -781,8 +843,12 @@ export default function App() {
                 onUpdatePhotoFilter={handleUpdatePhotoFilter}
                 onApplyFilterToAll={handleApplyFilterToAll}
                 onUpdateConsent={handleUpdateConsent}
+                onQrShareRecorded={handleQrShareRecorded}
+                onExportRecorded={handleExportRecorded}
                 activeMode={shareActiveMode}
                 onSetActiveMode={setShareActiveMode}
+                language={language}
+                t={t}
               />
             </div>
           )}

@@ -47,6 +47,11 @@ export interface KioskSecurityConfig {
 export interface CloudStorageConfig {
   workerUrl?: string; // Địa chỉ Cloudflare Worker nhận & lưu ảnh, vd: https://ten-worker.ten-tai-khoan.workers.dev
   uploadToken?: string; // Mã bí mật xác thực với Worker (phải khớp với UPLOAD_TOKEN đã đặt trên Worker)
+  // Mã dùng để gộp THỐNG KÊ TỔNG (lượt chụp, ảnh, QR đã chia sẻ, dải ảnh đã xuất) của nhiều máy/nhiều
+  // địa điểm dùng chung 1 tài khoản cho thuê vào cùng 1 chỗ trên Worker (namespace KV STATS_KV) — xem
+  // GET /stats-page?key=<mã này> trên Worker để xem thống kê từ xa mà không cần đứng tại máy. Để trống
+  // thì app sẽ không gửi số liệu lên Worker (vẫn hoạt động bình thường, chỉ là không có thống kê từ xa).
+  statsAccountKey?: string;
 }
 
 // 1 bánh xe màu kiểu Blackmagic/DaVinci Resolve ("Color Wheel") cho ĐÚNG 1 vùng tông (tối/trung/
