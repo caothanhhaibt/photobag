@@ -83,6 +83,15 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     return 2;
   }, [layoutConfig]);
 
+  // Chiều rộng cột phải (cột hậu kỳ) tự tính theo NHU CẦU THỰC TẾ thay vì 1 tỉ lệ % cố định: mỗi ô
+  // chờ ảnh có 1 kích thước "vừa mắt" co giãn nhẹ theo màn hình nhưng có giới hạn trên hợp lý, rồi
+  // nhân theo số cột (1 hoặc 2) của layout đang chọn. Cột trái (ảnh đã chụp) luôn cần nhiều chỗ hơn
+  // nên không còn ăn theo tỉ lệ cố định nữa — chỉ đơn giản chiếm hết phần còn lại (flex-1).
+  const stagingColWidth =
+    stagingCols === 1
+      ? 'clamp(120px, 22vw, 170px)'
+      : 'calc(clamp(120px, 22vw, 170px) * 2 + 0.5rem)';
+
   // Ảnh mới chụp gần nhất luôn hiển thị lên đầu cột "Tất Cả Ảnh" — sắp theo thời gian chụp giảm
   // dần thay vì phụ thuộc thứ tự vốn có của mảng (phòng trường hợp thứ tự gốc không đảm bảo).
   const sortedPhotos = useMemo(
@@ -235,7 +244,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDropOnLeft}
-            className="flex-[2.2] min-h-0 flex flex-col gap-2.5"
+            className="flex-1 min-h-0 flex flex-col gap-2.5"
           >
             <div className="flex items-center justify-between px-0.5">
               {isFreeMode ? (
@@ -350,7 +359,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
 
           {/* CỘT PHẢI (NHỎ HƠN): SỐ Ô CHỜ IN, SẮP THEO ĐÚNG QUY CÁCH CỦA BỐ CỤC ĐÃ CHỌN */}
-          <div className="flex-1 min-h-0 flex flex-col gap-2.5 md:max-w-[280px]">
+          <div
+            className="flex-1 min-h-0 flex flex-col gap-2.5 md:flex-none md:w-[var(--staging-col-w)] md:max-w-[var(--staging-col-w)]"
+            style={{ '--staging-col-w': stagingColWidth } as React.CSSProperties}
+          >
             {!(isFreeMode && leftTab === 'layout') && (
               <div className="px-0.5">
                 <h3 className="text-[11px] font-sans font-bold uppercase tracking-[0.2em] text-[#1A1A1A]">
@@ -365,7 +377,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </div>
             ) : (
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-3">
-              <div className={`grid gap-2 ${stagingCols === 1 ? 'grid-cols-1 max-w-[140px] mx-auto md:mx-0' : 'grid-cols-2'}`}>
+              <div className={`grid gap-2 ${stagingCols === 1 ? 'grid-cols-1 max-w-[170px] mx-auto md:max-w-none md:mx-0' : 'grid-cols-2'}`}>
                 {staged.map((photoId, slotIdx) => {
                   const photo = photoId ? capturedPhotos.find((p) => p.id === photoId) : null;
                   return (

@@ -9,7 +9,7 @@ import {
   ChevronRight,
   Columns,
   Rows,
-  Sparkles,
+  Heart,
   Bookmark,
   Grid2X2,
   Check,
@@ -49,7 +49,7 @@ const LAYOUT_GROUPS: LayoutGroup[] = [
   {
     id: 'single-col',
     title: 'Cột Đơn + Vùng Lời Chúc',
-    icon: Sparkles,
+    icon: Heart,
   },
   {
     id: 'editorial',

@@ -5,7 +5,6 @@ import {
   Heart,
   MessageSquare,
   Bookmark,
-  Sparkles,
   Film,
   Music,
   Ticket,
@@ -296,7 +295,7 @@ export const LayoutIllustration: React.FC<LayoutIllustrationProps> = ({
     case 'layout-h':
       return (
         <div className={`w-22 h-16 ${paperBg} rounded-md border-2 ${isSelected ? 'border-amber-500 shadow-sm' : 'border-[#1A1A1A]/20'} p-1 flex gap-1`}>
-          <div className="w-[40%] flex flex-col gap-0.6 justify-center">
+          <div className="w-[40%] flex flex-col gap-0.6 justify-between">
             <div className={`h-6 ${boxBg} rounded-xs border flex items-center justify-center text-[6px] font-bold`}>1</div>
             <div className={`h-6 ${boxBg} rounded-xs border flex items-center justify-center text-[6px] font-bold`}>2</div>
           </div>
@@ -420,10 +419,8 @@ export const FrameStyleIllustration: React.FC<FrameStyleIllustrationProps> = ({
     case 'classic':
       return (
         <div className={`w-full h-24 rounded-lg bg-[#FAF8F5] border-2 ${isSelected ? 'border-amber-500 shadow-md ring-2 ring-amber-400/30' : 'border-[#1A1A1A]/15'} p-2 flex flex-col justify-between relative overflow-hidden`}>
-          <div className="flex items-center justify-between text-[#8C7A5B]">
-            <Sparkles className="w-3 h-3" />
+          <div className="flex items-center justify-center text-[#8C7A5B]">
             <span className="text-[7px] font-serif tracking-[0.2em] font-bold">STUDIO EDITORIAL</span>
-            <Sparkles className="w-3 h-3" />
           </div>
           <div className="w-full h-11 bg-white border border-[#8C7A5B]/30 rounded-xs shadow-inner flex items-center justify-center">
             <Camera className="w-4 h-4 text-[#8C7A5B]/50" />

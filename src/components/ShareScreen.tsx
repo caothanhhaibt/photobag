@@ -480,6 +480,48 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
         color: '#F3ECE4',
       };
     }
+    if (frameStyle === 'nutrition-label') {
+      return {
+        backgroundColor: '#FFFFFF',
+        borderColor: '#1A1A1A',
+        color: '#1A1A1A',
+      };
+    }
+    if (frameStyle === 'scrapbook') {
+      return {
+        backgroundColor: '#EFE7D8',
+        borderColor: '#8C7A5B',
+        color: '#3A332A',
+      };
+    }
+    if (frameStyle === 'concert-ticket') {
+      return {
+        backgroundColor: '#1A1A2E',
+        borderColor: 'rgba(245,214,123,0.35)',
+        color: '#F5D67B',
+      };
+    }
+    if (frameStyle === 'vinyl-foldcard') {
+      return {
+        backgroundColor: '#2B2623',
+        borderColor: '#D97706',
+        color: '#F3ECE4',
+      };
+    }
+    if (frameStyle === 'branded-foldcard') {
+      return {
+        backgroundColor: '#1A1A1A',
+        borderColor: 'rgba(255,255,255,0.2)',
+        color: '#FFFFFF',
+      };
+    }
+    if (frameStyle === 'train-ticket') {
+      return {
+        backgroundColor: '#F5F0E4',
+        borderColor: '#8C6239',
+        color: '#4A3A24',
+      };
+    }
     return {
       backgroundColor: frameInfo.hex,
       borderColor: frameInfo.borderHex,
@@ -590,6 +632,58 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="text-center pb-0.5 mb-0.5 border-b border-dashed border-current/30 shrink-0">
                 <span className="text-[6.5px] font-bold font-sans tracking-[0.2em] uppercase">
                   ★ ADMIT ONE • MEMORY PASS ★
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'nutrition-label' && (
+              <div className="text-center pb-1 mb-1 bg-[#1A1A1A] text-white -mx-2 sm:-mx-2.5 -mt-2 sm:-mt-2.5 px-2 sm:px-2.5 pt-1.5 shrink-0">
+                <h1 className="text-[9px] sm:text-[10px] font-black tracking-wide uppercase leading-tight">
+                  Nhãn Dinh Dưỡng Kỷ Niệm
+                </h1>
+                <p className="text-[6px] font-sans tracking-[0.15em] uppercase opacity-70 mt-0.5">MEMORY FACTS</p>
+              </div>
+            )}
+
+            {frameStyle === 'scrapbook' && (
+              <div className="flex justify-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold px-2 py-0.5 rounded-xs bg-amber-500/40 -rotate-3 shadow-xs">
+                  ✂ SCRAPBOOK
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'concert-ticket' && (
+              <div className="text-center pb-0.5 mb-0.5 border-b border-dashed border-current/30 shrink-0">
+                <span className="text-[7px] sm:text-[7.5px] font-black tracking-[0.2em] uppercase">
+                  ★ ADMIT ONE • VIP PASS ★
+                </span>
+                <p className="text-[6px] tracking-[0.15em] uppercase opacity-70 mt-0.5">
+                  {customTitle || 'LIVE MEMORY TOUR'}
+                </p>
+              </div>
+            )}
+
+            {frameStyle === 'vinyl-foldcard' && (
+              <div className="text-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold tracking-[0.2em] uppercase text-amber-500">
+                  💿 Thiệp Gấp Đĩa Nhạc
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'branded-foldcard' && (
+              <div className="text-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold tracking-[0.2em] uppercase opacity-70">
+                  🎟 Thiệp Gấp Thương Hiệu
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'train-ticket' && (
+              <div className="pb-1 mb-1 -mx-2 sm:-mx-2.5 -mt-2 sm:-mt-2.5 px-2 sm:px-2.5 pt-1.5 bg-[#8C6239] text-white shrink-0">
+                <span className="text-[6.5px] sm:text-[7px] font-bold tracking-[0.15em] uppercase">
+                  GA KỶ NIỆM → GA HẠNH PHÚC
                 </span>
               </div>
             )}
@@ -836,6 +930,64 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   ♫ SIDE A • LOVE TRACK
                 </div>
                 <div className="text-[6px] opacity-70 mt-0.5">{dateStr} • STUDIO LP</div>
+              </div>
+            )}
+
+            {frameStyle === 'nutrition-label' && (
+              <div className="pt-1 mt-0.5 border-t-4 border-current shrink-0">
+                <div className="text-[6px] font-mono leading-tight">
+                  <div>TÌNH YÊU ........ 100%</div>
+                  <div>NIỀM TIN ........ 100%</div>
+                  <div>HẠNH PHÚC ....... 100%</div>
+                </div>
+                <div className="text-[5.5px] tracking-widest text-center mt-1 opacity-70 font-mono">
+                  ▌▌▌ {dateStr} ▌▌▌
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'scrapbook' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <h3 className="font-artistic-serif italic text-[10px] sm:text-[11px] font-bold leading-tight">
+                  {customTitle || 'Những khoảnh khắc đáng nhớ ♡'}
+                </h3>
+                <p className="text-[6px] tracking-[0.15em] opacity-70 uppercase font-sans mt-0.5">{dateStr}</p>
+              </div>
+            )}
+
+            {frameStyle === 'concert-ticket' && (
+              <div className="pt-0.5 mt-0.5 flex items-center justify-between text-[6px] font-mono tracking-wider shrink-0">
+                <span>01. FIRST MEET</span>
+                <span className="opacity-70">{dateStr}</span>
+              </div>
+            )}
+
+            {frameStyle === 'vinyl-foldcard' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <div className="text-[8px] font-serif font-bold tracking-[0.15em]">SIDE A</div>
+                <div className="text-[6px] opacity-70 mt-0.5">{customTitle || 'LOVE SONG'} • {dateStr}</div>
+                <div className="text-[5.5px] opacity-50 mt-1 italic leading-tight">
+                  In ra tự gấp đôi: ảnh nằm 1 nửa, nửa kia là bìa đĩa nhạc
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'branded-foldcard' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <div className="text-[9px] font-serif font-black tracking-[0.15em] uppercase">
+                  {customTitle || 'SOCIAL CLUB'}
+                </div>
+                <div className="text-[6px] opacity-60 tracking-[0.2em] uppercase mt-0.5">{dateStr}</div>
+                <div className="text-[5.5px] opacity-50 mt-1 italic leading-tight">
+                  In ra tự gấp đôi: ảnh nằm 1 nửa, nửa kia là bìa thương hiệu
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'train-ticket' && (
+              <div className="pt-0.5 mt-0.5 border-t border-dashed border-current/30 flex items-center justify-between text-[6px] font-mono shrink-0">
+                <span>GHẾ: A-01 • TOA: 01</span>
+                <span>{customTitle || 'VÉ KỶ NIỆM'}</span>
               </div>
             )}
 
@@ -1229,9 +1381,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   Xuất Bản & Tải Dải Ảnh
                 </h3>
               </div>
-              <span className="text-[10px] font-sans font-bold text-[#8C7A5B] bg-[#8C7A5B]/10 px-2 py-0.5 rounded-full">
-                {currentLayoutConfig.shortName} • {activeFrameStyleOption.shortName}
-              </span>
             </div>
 
             {/* NÚT TẢI VỀ ẢNH PNG 300 DPI CHÍNH */}
@@ -1358,7 +1507,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             {/* Tùy chọn quyền riêng tư: Cho phép hiển thị lên màn hình chờ (Attract Feed) */}
             <div className="bg-white/80 p-3.5 rounded-xl border border-[#1A1A1A]/10 shadow-xs flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-[#1A1A1A]">
                     Hiển thị trên màn hình chờ sự kiện (Live Feed)
@@ -1493,6 +1641,58 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
               <div className="text-center pb-0.5 mb-0.5 border-b border-dashed border-current/30 shrink-0">
                 <span className="text-[6.5px] font-bold font-sans tracking-[0.2em] uppercase">
                   ★ ADMIT ONE • MEMORY PASS ★
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'nutrition-label' && (
+              <div className="text-center pb-1 mb-1 bg-[#1A1A1A] text-white -mx-2 sm:-mx-2.5 -mt-2 sm:-mt-2.5 px-2 sm:px-2.5 pt-1.5 shrink-0">
+                <h1 className="text-[9px] sm:text-[10px] font-black tracking-wide uppercase leading-tight">
+                  Nhãn Dinh Dưỡng Kỷ Niệm
+                </h1>
+                <p className="text-[6px] font-sans tracking-[0.15em] uppercase opacity-70 mt-0.5">MEMORY FACTS</p>
+              </div>
+            )}
+
+            {frameStyle === 'scrapbook' && (
+              <div className="flex justify-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold px-2 py-0.5 rounded-xs bg-amber-500/40 -rotate-3 shadow-xs">
+                  ✂ SCRAPBOOK
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'concert-ticket' && (
+              <div className="text-center pb-0.5 mb-0.5 border-b border-dashed border-current/30 shrink-0">
+                <span className="text-[7px] sm:text-[7.5px] font-black tracking-[0.2em] uppercase">
+                  ★ ADMIT ONE • VIP PASS ★
+                </span>
+                <p className="text-[6px] tracking-[0.15em] uppercase opacity-70 mt-0.5">
+                  {customTitle || 'LIVE MEMORY TOUR'}
+                </p>
+              </div>
+            )}
+
+            {frameStyle === 'vinyl-foldcard' && (
+              <div className="text-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold tracking-[0.2em] uppercase text-amber-500">
+                  💿 Thiệp Gấp Đĩa Nhạc
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'branded-foldcard' && (
+              <div className="text-center pb-0.5 mb-0.5 shrink-0">
+                <span className="text-[6.5px] font-bold tracking-[0.2em] uppercase opacity-70">
+                  🎟 Thiệp Gấp Thương Hiệu
+                </span>
+              </div>
+            )}
+
+            {frameStyle === 'train-ticket' && (
+              <div className="pb-1 mb-1 -mx-2 sm:-mx-2.5 -mt-2 sm:-mt-2.5 px-2 sm:px-2.5 pt-1.5 bg-[#8C6239] text-white shrink-0">
+                <span className="text-[6.5px] sm:text-[7px] font-bold tracking-[0.15em] uppercase">
+                  GA KỶ NIỆM → GA HẠNH PHÚC
                 </span>
               </div>
             )}
@@ -1739,6 +1939,64 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   ♫ SIDE A • LOVE TRACK
                 </div>
                 <div className="text-[6px] opacity-70 mt-0.5">{dateStr} • STUDIO LP</div>
+              </div>
+            )}
+
+            {frameStyle === 'nutrition-label' && (
+              <div className="pt-1 mt-0.5 border-t-4 border-current shrink-0">
+                <div className="text-[6px] font-mono leading-tight">
+                  <div>TÌNH YÊU ........ 100%</div>
+                  <div>NIỀM TIN ........ 100%</div>
+                  <div>HẠNH PHÚC ....... 100%</div>
+                </div>
+                <div className="text-[5.5px] tracking-widest text-center mt-1 opacity-70 font-mono">
+                  ▌▌▌ {dateStr} ▌▌▌
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'scrapbook' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <h3 className="font-artistic-serif italic text-[10px] sm:text-[11px] font-bold leading-tight">
+                  {customTitle || 'Những khoảnh khắc đáng nhớ ♡'}
+                </h3>
+                <p className="text-[6px] tracking-[0.15em] opacity-70 uppercase font-sans mt-0.5">{dateStr}</p>
+              </div>
+            )}
+
+            {frameStyle === 'concert-ticket' && (
+              <div className="pt-0.5 mt-0.5 flex items-center justify-between text-[6px] font-mono tracking-wider shrink-0">
+                <span>01. FIRST MEET</span>
+                <span className="opacity-70">{dateStr}</span>
+              </div>
+            )}
+
+            {frameStyle === 'vinyl-foldcard' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <div className="text-[8px] font-serif font-bold tracking-[0.15em]">SIDE A</div>
+                <div className="text-[6px] opacity-70 mt-0.5">{customTitle || 'LOVE SONG'} • {dateStr}</div>
+                <div className="text-[5.5px] opacity-50 mt-1 italic leading-tight">
+                  In ra tự gấp đôi: ảnh nằm 1 nửa, nửa kia là bìa đĩa nhạc
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'branded-foldcard' && (
+              <div className="text-center pt-1 mt-0.5 shrink-0">
+                <div className="text-[9px] font-serif font-black tracking-[0.15em] uppercase">
+                  {customTitle || 'SOCIAL CLUB'}
+                </div>
+                <div className="text-[6px] opacity-60 tracking-[0.2em] uppercase mt-0.5">{dateStr}</div>
+                <div className="text-[5.5px] opacity-50 mt-1 italic leading-tight">
+                  In ra tự gấp đôi: ảnh nằm 1 nửa, nửa kia là bìa thương hiệu
+                </div>
+              </div>
+            )}
+
+            {frameStyle === 'train-ticket' && (
+              <div className="pt-0.5 mt-0.5 border-t border-dashed border-current/30 flex items-center justify-between text-[6px] font-mono shrink-0">
+                <span>GHẾ: A-01 • TOA: 01</span>
+                <span>{customTitle || 'VÉ KỶ NIỆM'}</span>
               </div>
             )}
 
@@ -2130,9 +2388,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
                   Xuất Bản & Tải Dải Ảnh
                 </h3>
               </div>
-              <span className="text-[10px] font-sans font-bold text-[#8C7A5B] bg-[#8C7A5B]/10 px-2 py-0.5 rounded-full">
-                {currentLayoutConfig.shortName} • {activeFrameStyleOption.shortName}
-              </span>
             </div>
 
             {/* NÚT TẢI VỀ ẢNH PNG 300 DPI CHÍNH */}
@@ -2259,7 +2514,6 @@ export const ShareScreen: React.FC<ShareScreenProps> = ({
             {/* Tùy chọn quyền riêng tư: Cho phép hiển thị lên màn hình chờ (Attract Feed) */}
             <div className="bg-white/80 p-3.5 rounded-xl border border-[#1A1A1A]/10 shadow-xs flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
                 <div className="flex flex-col">
                   <span className="text-xs font-bold text-[#1A1A1A]">
                     Hiển thị trên màn hình chờ sự kiện (Live Feed)

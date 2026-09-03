@@ -9,7 +9,6 @@ import {
   ZapOff,
   Timer,
   LayoutGrid,
-  Sparkles,
   Layers,
   FileText,
   EyeOff,

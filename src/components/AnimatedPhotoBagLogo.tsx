@@ -1,6 +1,5 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sparkles } from 'lucide-react';
 
 interface AnimatedPhotoBagLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -405,21 +404,9 @@ export const AnimatedPhotoBagLogo: React.FC<AnimatedPhotoBagLogoProps> = ({
           }}
           className="mt-3.5 sm:mt-4 px-5 sm:px-8 py-1.5 sm:py-2 bg-gradient-to-r from-[#1D4ED8] via-[#2563EB] to-[#3B82F6] text-white rounded-full border border-white/40 shadow-lg flex items-center justify-center gap-2 sm:gap-3 transition-transform hover:scale-105"
         >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
-          >
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
-          </motion.div>
           <span className="text-xs sm:text-sm md:text-base font-sans font-extrabold tracking-[0.22em] uppercase whitespace-nowrap drop-shadow-xs">
             SMILE • SNAP • SHARE
           </span>
-          <motion.div
-            animate={{ rotate: -360 }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
-          >
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
-          </motion.div>
         </motion.div>
       )}
 
